@@ -1,0 +1,102 @@
+// Copyright (c) Dutch Analytics B.V. 2026
+// SPDX-License-Identifier: MPL-2.0
+
+package provider
+
+import (
+	"fmt"
+	"os"
+	"testing"
+
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
+	"github.com/hashicorp/terraform-plugin-testing/statecheck"
+	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
+)
+
+func TestAccWebhookResource(t *testing.T) {
+	projectName := os.Getenv("UBIOPS_PROJECT")
+	if projectName == "" {
+		t.Skip("UBIOPS_PROJECT must be set for acceptance tests")
+	}
+
+	deploymentName := fmt.Sprintf("tf-acc-test-%s-dep", t.Name())
+	webhookName := fmt.Sprintf("tf-acc-test-%s", t.Name())
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create.
+			{
+				Config: testAccWebhookResourceConfig(projectName, deploymentName, webhookName, "https://example.com/hook"),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"ubiops_webhook.test",
+						tfjsonpath.New("name"),
+						knownvalue.StringExact(webhookName),
+					),
+					statecheck.ExpectKnownValue(
+						"ubiops_webhook.test",
+						tfjsonpath.New("event"),
+						knownvalue.StringExact("deployment_request_finished"),
+					),
+				},
+			},
+			// ImportState.
+			{
+				ResourceName:            "ubiops_webhook.test",
+				ImportState:             true,
+				ImportStateId:           fmt.Sprintf("%s/%s", projectName, webhookName),
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"headers_json"},
+			},
+			// Update URL.
+			{
+				Config: testAccWebhookResourceConfig(projectName, deploymentName, webhookName, "https://example.com/hook-updated"),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"ubiops_webhook.test",
+						tfjsonpath.New("url"),
+						knownvalue.StringExact("https://example.com/hook-updated"),
+					),
+				},
+			},
+			// Delete is automatic.
+		},
+	})
+}
+
+func testAccWebhookResourceConfig(projectName, deploymentName, webhookName, url string) string {
+	return fmt.Sprintf(`
+resource "ubiops_deployment" "test" {
+  project_name = %[1]q
+  name         = %[2]q
+  input_type   = "structured"
+  output_type  = "structured"
+
+  input_fields = [
+    {
+      name      = "input"
+      data_type = "string"
+    }
+  ]
+
+  output_fields = [
+    {
+      name      = "output"
+      data_type = "string"
+    }
+  ]
+}
+
+resource "ubiops_webhook" "test" {
+  project_name = %[1]q
+  name         = %[3]q
+  url          = %[4]q
+  event        = "deployment_request_finished"
+  object_type  = "deployment"
+  object_name  = ubiops_deployment.test.name
+}
+`, projectName, deploymentName, webhookName, url)
+}
