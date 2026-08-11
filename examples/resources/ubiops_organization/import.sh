@@ -1,0 +1,1 @@
+terraform import ubiops_organization.example my-organization
