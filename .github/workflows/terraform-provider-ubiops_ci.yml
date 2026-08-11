@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: private-infra
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  release:
+    types:
+      - published
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
+        with:
+          terraform_wrapper: false
+      - name: Setup Biome
+        uses: biomejs/setup-biome@4c91541eaada48f67d7dbd7833600ce162b68f51 # v2.7.1
+      - name: Setup shfmt
+        env:
+          SHFMT_VERSION: v3.13.0
+        run: |
+          curl --silent --location --output shfmt \
+            "https://github.com/mvdan/sh/releases/download/${SHFMT_VERSION}/shfmt_${SHFMT_VERSION}_linux_amd64"
+          install shfmt /usr/local/bin/shfmt
+      - name: Setup Cosign
+        # TODO: pin to a commit SHA to match this file's convention for third-party actions
+        uses: sigstore/cosign-installer@v4.1.0
+      - name: Setup yamlfmt
+        env:
+          YAMLFMT_VERSION: v0.21.0
+        run: |
+          curl --silent --location --output "yamlfmt_${YAMLFMT_VERSION#v}_Linux_x86_64.tar.gz" \
+            "https://github.com/google/yamlfmt/releases/download/${YAMLFMT_VERSION}/yamlfmt_${YAMLFMT_VERSION#v}_Linux_x86_64.tar.gz"
+          curl --silent --location --output checksums.txt \
+            "https://github.com/google/yamlfmt/releases/download/${YAMLFMT_VERSION}/checksums.txt"
+          curl --silent --location --output checksums.txt.sig \
+            "https://github.com/google/yamlfmt/releases/download/${YAMLFMT_VERSION}/checksums.txt.sig"
+          curl --silent --location --output checksums.txt.pem \
+            "https://github.com/google/yamlfmt/releases/download/${YAMLFMT_VERSION}/checksums.txt.pem"
+          cosign verify-blob --signature checksums.txt.sig --certificate checksums.txt.pem checksums.txt \
+            --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
+            --certificate-identity-regexp='google/yamlfmt'
+          grep 'Linux_x86_64\.tar\.gz$' checksums.txt | sha256sum --check
+          tar --extract --gzip --file "yamlfmt_${YAMLFMT_VERSION#v}_Linux_x86_64.tar.gz" yamlfmt
+          install yamlfmt /usr/local/bin/yamlfmt
+      - name: Run Biome
+        run: biome ci
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        with:
+          version: latest
+      - name: Run markdownlint
+        uses: DavidAnson/markdownlint-cli2-action@07035fd053f7be764496c0f8d8f9f41f98305101 # v22.0.0
+      - name: Setup ShellCheck
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+        run: |
+          curl --silent --location --output "shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
+            "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          tar --extract --xz --file "shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" "shellcheck-${SHELLCHECK_VERSION}/shellcheck"
+          install "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+      - name: Run ShellCheck
+        run: shellcheck $(find . -name '*.sh' -not -path './examples/*' -not -path './public_repo/*')
+      - name: Run shfmt
+        run: shfmt --diff $(find . -name '*.sh' -not -path './examples/*' -not -path './public_repo/*')
+      - name: Run terraform fmt
+        run: terraform fmt -check -recursive examples/
+      - name: Run yamlfmt
+        run: yamlfmt -lint
