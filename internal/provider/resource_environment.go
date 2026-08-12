@@ -191,7 +191,7 @@ func (r *EnvironmentResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	if !data.SourceFile.IsNull() && !data.SourceFile.IsUnknown() {
-		r.uploadRevision(ctx, &data, &resp.Diagnostics)
+		revisionID := r.uploadRevision(ctx, &data, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -199,7 +199,7 @@ func (r *EnvironmentResource) Create(ctx context.Context, req resource.CreateReq
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		r.waitForBuild(ctx, &data, &resp.Diagnostics)
+		r.waitForBuild(ctx, &data, revisionID, &resp.Diagnostics)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -296,11 +296,11 @@ func (r *EnvironmentResource) Update(ctx context.Context, req resource.UpdateReq
 
 	if !plan.SourceFile.IsNull() && !plan.SourceFile.IsUnknown() {
 		if !plan.SourceFile.Equal(state.SourceFile) || !plan.SourceFileSHA256.Equal(state.SourceFileSHA256) {
-			r.uploadRevision(ctx, &plan, &resp.Diagnostics)
+			revisionID := r.uploadRevision(ctx, &plan, &resp.Diagnostics)
 			if resp.Diagnostics.HasError() {
 				return
 			}
-			r.waitForBuild(ctx, &plan, &resp.Diagnostics)
+			r.waitForBuild(ctx, &plan, revisionID, &resp.Diagnostics)
 			if resp.Diagnostics.HasError() {
 				return
 			}
@@ -380,14 +380,14 @@ func readEnvironmentResult(result map[string]any, data *EnvironmentResourceModel
 	}
 }
 
-// uploadRevision uploads a requirements.txt or zip to the environment revisions endpoint.
-func (r *EnvironmentResource) uploadRevision(ctx context.Context, data *EnvironmentResourceModel, diags *diag.Diagnostics) {
+// uploadRevision uploads to the revisions endpoint, returning the new revision's id.
+func (r *EnvironmentResource) uploadRevision(ctx context.Context, data *EnvironmentResourceModel, diags *diag.Diagnostics) string {
 	filePath := data.SourceFile.ValueString()
 
 	hash, err := computeFileSHA256(filePath)
 	if err != nil {
 		diags.AddError("Error computing source file hash", err.Error())
-		return
+		return ""
 	}
 	if data.SourceFileSHA256.IsNull() || data.SourceFileSHA256.IsUnknown() {
 		data.SourceFileSHA256 = types.StringValue(hash)
@@ -399,20 +399,24 @@ func (r *EnvironmentResource) uploadRevision(ctx context.Context, data *Environm
 	var result map[string]any
 	if err := r.client.Upload(ctx, revisionPath, filePath, &result); err != nil {
 		diags.AddError("Error uploading environment revision", err.Error())
-		return
+		return ""
 	}
 
 	tflog.Info(ctx, "uploaded environment revision", map[string]any{"name": data.Name.ValueString()})
+	revisionID, _ := result["id"].(string)
+	return revisionID
 }
 
-// waitForBuild polls the environment status until the build completes, fails, or times out.
-func (r *EnvironmentResource) waitForBuild(ctx context.Context, data *EnvironmentResourceModel, diags *diag.Diagnostics) {
+// waitForBuild polls the uploaded revision's build, not the environment's own
+// "status" (which reflects the previous build until the new one finishes).
+func (r *EnvironmentResource) waitForBuild(ctx context.Context, data *EnvironmentResourceModel, revisionID string, diags *diag.Diagnostics) {
 	timeoutSecs := data.BuildTimeout.ValueInt64()
-	if timeoutSecs == 0 {
+	if timeoutSecs == 0 || revisionID == "" {
 		return
 	}
 
-	envPath := fmt.Sprintf("/projects/%s/environments/%s", data.ProjectName.ValueString(), data.Name.ValueString())
+	buildsPath := fmt.Sprintf("/projects/%s/environments/%s/revisions/%s/builds",
+		data.ProjectName.ValueString(), data.Name.ValueString(), revisionID)
 	deadline := time.Now().Add(time.Duration(timeoutSecs) * time.Second)
 
 	tflog.Info(ctx, "waiting for environment build", map[string]any{
@@ -421,19 +425,24 @@ func (r *EnvironmentResource) waitForBuild(ctx context.Context, data *Environmen
 	})
 
 	for {
-		var result map[string]any
-		if err := r.client.Get(ctx, envPath, &result); err != nil {
+		var builds []map[string]any
+		if err := r.client.Get(ctx, buildsPath, &builds); err != nil {
 			diags.AddError("Error polling environment build", err.Error())
 			return
 		}
 
-		status, _ := result["status"].(string)
+		var status string
+		var errMsg string
+		if len(builds) > 0 {
+			status, _ = builds[0]["status"].(string)
+			errMsg, _ = builds[0]["error_message"].(string)
+		}
+
 		switch status {
-		case "available":
+		case "success":
 			tflog.Info(ctx, "environment build complete", map[string]any{"name": data.Name.ValueString()})
 			return
 		case "failed":
-			errMsg, _ := result["error_message"].(string)
 			diags.AddError(
 				fmt.Sprintf("Environment %q build failed", data.Name.ValueString()),
 				errMsg,
