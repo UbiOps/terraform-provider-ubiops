@@ -6,6 +6,7 @@ package provider
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -122,4 +123,39 @@ resource "ubiops_deployment" "test" {
   ]
 }
 `, projectName, name)
+}
+
+func TestAccDeploymentResource_InvalidInputType(t *testing.T) {
+	projectName := os.Getenv("UBIOPS_PROJECT")
+	if projectName == "" {
+		t.Skip("UBIOPS_PROJECT must be set for acceptance tests")
+	}
+
+	deploymentName := testAccResourceName(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "ubiops_deployment" "test" {
+  project_name = %[1]q
+  name         = %[2]q
+  input_type   = "not_a_real_type"
+  output_type  = "structured"
+
+  input_fields = [
+    { name = "input", data_type = "string" }
+  ]
+
+  output_fields = [
+    { name = "output", data_type = "string" }
+  ]
+}
+`, projectName, deploymentName),
+				ExpectError: regexp.MustCompile(`(?s)Attribute input_type value must be one of`),
+			},
+		},
+	})
 }

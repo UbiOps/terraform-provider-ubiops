@@ -6,6 +6,7 @@ package provider
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -111,4 +112,41 @@ resource "ubiops_deployment_version" "test" {
   maximum_instances = %[5]d
 }
 `, projectName, deploymentName, version, minInstances, maxInstances)
+}
+
+func TestAccDeploymentVersionResource_InvalidRetentionMode(t *testing.T) {
+	projectName := os.Getenv("UBIOPS_PROJECT")
+	if projectName == "" {
+		t.Skip("UBIOPS_PROJECT must be set for acceptance tests")
+	}
+
+	deploymentName := testAccResourceName(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "ubiops_deployment" "test" {
+  project_name = %[1]q
+  name         = %[2]q
+  input_type   = "structured"
+  output_type  = "structured"
+
+  input_fields  = [{ name = "input", data_type = "string" }]
+  output_fields = [{ name = "output", data_type = "string" }]
+}
+
+resource "ubiops_deployment_version" "test" {
+  project_name           = %[1]q
+  deployment_name        = ubiops_deployment.test.name
+  version                = "v1"
+  request_retention_mode = "not_a_real_mode"
+}
+`, projectName, deploymentName),
+				ExpectError: regexp.MustCompile(`(?s)Attribute request_retention_mode value must be one of`),
+			},
+		},
+	})
 }

@@ -6,6 +6,7 @@ package provider
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -77,4 +78,30 @@ resource "ubiops_bucket" "test" {
   description  = %[3]q
 }
 `, projectName, bucketName, description)
+}
+
+func TestAccBucketResource_InvalidProvider(t *testing.T) {
+	projectName := os.Getenv("UBIOPS_PROJECT")
+	if projectName == "" {
+		t.Skip("UBIOPS_PROJECT must be set for acceptance tests")
+	}
+
+	bucketName := testAccResourceName(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "ubiops_bucket" "test" {
+  project_name    = %[1]q
+  name            = %[2]q
+  bucket_provider = "not_a_real_provider"
+}
+`, projectName, bucketName),
+				ExpectError: regexp.MustCompile(`(?s)Attribute bucket_provider value must be one of`),
+			},
+		},
+	})
 }

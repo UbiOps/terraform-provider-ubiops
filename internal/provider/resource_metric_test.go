@@ -6,6 +6,7 @@ package provider
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -85,4 +86,31 @@ resource "ubiops_metric" "test" {
   metric_type  = %[3]q%[4]s
 }
 `, projectName, name, metricType, desc)
+}
+
+func TestAccMetricResource_InvalidMetricType(t *testing.T) {
+	projectName := os.Getenv("UBIOPS_PROJECT")
+	if projectName == "" {
+		t.Skip("UBIOPS_PROJECT must be set for acceptance tests")
+	}
+
+	metricName := testAccResourceName(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "ubiops_metric" "test" {
+  project_name = %[1]q
+  name         = %[2]q
+  metric_type  = "not_a_real_type"
+  unit         = "count"
+}
+`, projectName, metricName),
+				ExpectError: regexp.MustCompile(`(?s)Attribute metric_type value must be one of`),
+			},
+		},
+	})
 }

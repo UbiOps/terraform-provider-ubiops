@@ -6,6 +6,7 @@ package provider
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -151,4 +152,55 @@ resource "ubiops_webhook" "test" {
   depends_on = [ubiops_deployment_version.test]
 }
 `, projectName, deploymentName, webhookName, url)
+}
+
+func TestAccWebhookResource_InvalidTriggerEvent(t *testing.T) {
+	projectName := os.Getenv("UBIOPS_PROJECT")
+	if projectName == "" {
+		t.Skip("UBIOPS_PROJECT must be set for acceptance tests")
+	}
+
+	deploymentName := testAccResourceName(t) + "-dep"
+	webhookName := testAccResourceName(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "ubiops_deployment" "test" {
+  project_name = %[1]q
+  name         = %[2]q
+  input_type   = "structured"
+  output_type  = "structured"
+
+  input_fields = [
+    {
+      name      = "input"
+      data_type = "string"
+    }
+  ]
+
+  output_fields = [
+    {
+      name      = "output"
+      data_type = "string"
+    }
+  ]
+}
+
+resource "ubiops_webhook" "test" {
+  project_name = %[1]q
+  name         = %[3]q
+  url          = "https://example.com/hook"
+  event        = "not_a_real_event"
+  object_type  = "deployment"
+  object_name  = ubiops_deployment.test.name
+}
+`, projectName, deploymentName, webhookName),
+				ExpectError: regexp.MustCompile(`(?s)Attribute event value must be one of`),
+			},
+		},
+	})
 }
