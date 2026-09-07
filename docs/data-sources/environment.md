@@ -38,3 +38,6 @@ output "environment_id" {
 - `description` (String) Description of the environment
 - `display_name` (String) Display name of the environment
 - `id` (String) Unique identifier for the environment (UUID)
+- `labels` (Map of String) Dictionary containing key/value pairs where key indicates the label and value is the corresponding value of that label
+- `last_updated` (String) The date when the environment was last updated
+- `supports_request_format` (Boolean) Whether the environment supports UbiOps's structured request format (queuing, autoscaling, scheduled requests). Must match the `supports_request_format` of any deployment using this environment, or version creation fails.

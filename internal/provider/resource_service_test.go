@@ -27,8 +27,8 @@ func TestAccServiceResource(t *testing.T) {
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			// Create deployment + version first - default_version can't reference a version
-			// that doesn't exist yet, so it's set in a later step once "v1" is created.
+			// Create deployment + version first - default_version can't reference "v1"
+			// before it exists.
 			{
 				Config: testAccServiceDeploymentOnlyConfig(projectName, deploymentName),
 			},

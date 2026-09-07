@@ -33,10 +33,16 @@ output "service_id" {
 
 ### Read-Only
 
+- `authentication_method_token_enabled` (Boolean) Whether authentication with a token is enabled
+- `authentication_required` (Boolean) Whether authentication is required on this service
 - `deployment` (String) Name of the deployment that backs the service
 - `description` (String) Description of the service
 - `endpoint` (String) Endpoint of the service
 - `id` (String) Unique identifier for the service (UUID)
+- `labels` (Map of String) Dictionary containing key/value pairs where key indicates the label and value is the corresponding value of that label
 - `port` (Number) Port on which the deployment listens for the service
+- `rate_limit_token` (Number) Rate limit for the service per authentication token
+- `request_logging_excluded_paths` (String) A regex to exclude paths when storing requests
 - `time_created` (String) The date when the service was created
+- `time_updated` (String) The date when the service was last updated
 - `version` (String) Version of the deployment that backs the service

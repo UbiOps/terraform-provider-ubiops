@@ -49,8 +49,8 @@ func TestAccRoleResource(t *testing.T) {
 				ImportStateId:     fmt.Sprintf("%s/%s", projectName, roleName),
 				ImportStateVerify: true,
 			},
-			// Extend permissions — verifies the update path rewrites the full
-			// permission list rather than appending or leaving stale entries.
+			// Extend permissions - verifies the update path rewrites the full list
+			// rather than appending or leaving stale entries.
 			{
 				Config: testAccRoleResourceConfig(projectName, roleName, `["deployments.list", "deployments.get", "deployments.versions.list", "deployments.versions.get"]`),
 				ConfigStateChecks: []statecheck.StateCheck{

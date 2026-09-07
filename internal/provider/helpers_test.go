@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -17,12 +18,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// testAccResourceName builds a lowercase, UbiOps-safe, unique resource name: test
-// name + random suffix (avoids collisions across concurrent CI jobs and local runs),
-// truncated to fit UbiOps's 64-char limit alongside caller-added suffixes.
+// testAccResourceName builds a lowercase, unique, UbiOps-safe resource name,
+// truncated to fit the 64-char limit alongside caller-added suffixes.
 func testAccResourceName(t *testing.T) string {
 	t.Helper()
 	name := strings.ToLower(strings.TrimPrefix(t.Name(), "TestAcc"))
+	// Some resource types reject anything outside a-z0-9-; strip separators.
+	name = nonAlphanumericRun.ReplaceAllString(name, "")
 	if len(name) > 20 {
 		name = name[:20]
 	}
@@ -30,8 +32,10 @@ func testAccResourceName(t *testing.T) string {
 	return fmt.Sprintf("tf-acc-%s-%s", name, suffix)
 }
 
-// testAccFirstInstanceTypeID looks up a real instance type UUID from the test project,
-// required by ubiops_instance_type_group since the API rejects an empty instance_types list.
+var nonAlphanumericRun = regexp.MustCompile(`[^a-z0-9]+`)
+
+// testAccFirstInstanceTypeID looks up a real instance type UUID, required
+// since ubiops_instance_type_group rejects an empty instance_types list.
 func testAccFirstInstanceTypeID(t *testing.T, projectName string) string {
 	t.Helper()
 

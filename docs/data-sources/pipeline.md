@@ -37,5 +37,26 @@ output "pipeline_id" {
 - `default_version` (String) Default version of the pipeline
 - `description` (String) Description of the pipeline
 - `id` (String) Unique identifier for the pipeline (UUID)
+- `input_fields` (Attributes List) A list of pipeline input fields with name, data_type and widget (see [below for nested schema](#nestedatt--input_fields))
 - `input_type` (String) The type of the input of the pipeline
+- `labels` (Map of String) Dictionary containing key/value pairs where key indicates the label and value is the corresponding value of that label
+- `last_updated` (String) The date when the pipeline was last updated
+- `output_fields` (Attributes List) A list of pipeline output fields with name, data_type and widget (see [below for nested schema](#nestedatt--output_fields))
 - `output_type` (String) The type of the output of the pipeline
+
+<a id="nestedatt--input_fields"></a>
+### Nested Schema for `input_fields`
+
+Required:
+
+- `data_type` (String) The data type of the field.
+- `name` (String) The name of the field.
+
+
+<a id="nestedatt--output_fields"></a>
+### Nested Schema for `output_fields`
+
+Required:
+
+- `data_type` (String) The data type of the field.
+- `name` (String) The name of the field.

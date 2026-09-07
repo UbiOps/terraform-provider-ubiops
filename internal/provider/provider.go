@@ -31,9 +31,8 @@ func New(version string) func() provider.Provider {
 
 // ubiopsProvider is the provider implementation.
 type ubiopsProvider struct {
-	// version is set to the provider version on release, "dev" when the
-	// provider is built and ran locally, and "test" when running acceptance
-	// testing.
+	// version is the provider version on release, "dev" when built and run
+	// locally, or "test" during acceptance testing.
 	version string
 }
 
@@ -65,7 +64,7 @@ func (p *ubiopsProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 				Optional:            true,
 			},
 			"resolve": schema.StringAttribute{
-				MarkdownDescription: "Override DNS for the API host, e.g. `34.6.140.180`. Equivalent to curl --resolve. Remove once DNS is correct.",
+				MarkdownDescription: "Pin the `base_url` host to a specific IP instead of resolving it via DNS (equivalent to curl --resolve), e.g. `34.6.140.180`. Useful when the DNS record for a self-hosted UbiOps instance hasn't propagated yet; remove this setting once that DNS record resolves correctly on its own.",
 				Optional:            true,
 			},
 		},

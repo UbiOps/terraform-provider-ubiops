@@ -37,5 +37,27 @@ output "deployment_id" {
 - `default_version` (String) Default version of the deployment
 - `description` (String) Description of the deployment
 - `id` (String) Unique identifier for the deployment (UUID)
+- `input_fields` (Attributes List) The list of deployment input fields containing name and data_type. It is empty in case of plain input type deployments. (see [below for nested schema](#nestedatt--input_fields))
 - `input_type` (String) The type of the input of the deployment
+- `labels` (Map of String) Dictionary containing key/value pairs where key indicates the label and value is the corresponding value of that label
+- `last_updated` (String) The date when the deployment was last updated
+- `output_fields` (Attributes List) The list of deployment output fields containing name and data_type. It is empty in case of plain output type deployments. (see [below for nested schema](#nestedatt--output_fields))
 - `output_type` (String) The type of the output of the deployment
+- `supports_request_format` (Boolean) Whether the deployment supports UbiOps's structured request format (queuing, autoscaling, scheduled requests). false is required for Bring Your Own Docker deployments that are standalone applications (e.g. a Jupyter server, or a raw HTTP service like litellm-gateway) - the deployment's environment must have a matching supports_request_format value, or version creation fails with "Given environment is not supported for the deployment". Deployments with this set to false have no autoscaling - a fixed instance count only.
+
+<a id="nestedatt--input_fields"></a>
+### Nested Schema for `input_fields`
+
+Required:
+
+- `data_type` (String) The data type of the field.
+- `name` (String) The name of the field.
+
+
+<a id="nestedatt--output_fields"></a>
+### Nested Schema for `output_fields`
+
+Required:
+
+- `data_type` (String) The data type of the field.
+- `name` (String) The name of the field.

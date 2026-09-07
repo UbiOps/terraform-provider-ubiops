@@ -48,15 +48,14 @@ func (e *UbiOpsError) Error() string {
 }
 
 // NewUbiOpsClient creates a new UbiOps API client.
-// resolveIP, if non-empty, overrides DNS for the base URL host (equivalent to curl --resolve).
+// resolveIP, if non-empty, overrides DNS for the base URL host (like curl --resolve).
 func NewUbiOpsClient(baseURL, apiToken, providerVersion, resolveIP string) *UbiOpsClient {
-	// Strip a redundant leading "Token " - UbiOps's dashboard hands tokens out pre-fixed for
-	// copy-paste, which would otherwise double up with the "Token %s" header format below.
+	// Strip a redundant leading "Token " - UbiOps's dashboard hands tokens out
+	// pre-fixed for copy-paste.
 	apiToken = strings.TrimPrefix(strings.TrimPrefix(apiToken, "Token "), "token ")
 	httpClient := &http.Client{Timeout: 60 * time.Second}
-	// Escape hatch for self-hosted UbiOps instances behind an internal CA that isn't in the
-	// system trust store (e.g. cs-cluster). Off by default - only skips verification when the
-	// operator explicitly opts in, never silently.
+	// Escape hatch for self-hosted UbiOps behind an internal CA not in the system
+	// trust store; off by default, opt-in only.
 	insecure := os.Getenv("UBIOPS_TF_INSECURE_SKIP_VERIFY") == "1"
 	if resolveIP != "" || insecure {
 		transport := &http.Transport{
@@ -132,71 +131,28 @@ func (c *UbiOpsClient) Upload(ctx context.Context, path string, filePath string,
 
 // doUpload performs an HTTP POST with a pre-built body and content type.
 func (c *UbiOpsClient) doUpload(ctx context.Context, path string, body *bytes.Buffer, contentType string, result any) error {
-	url := c.BaseURL + path
-	bodyBytes := body.Bytes()
-
-	var lastErr error
-	for attempt := range maxRetries {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
-		if err != nil {
-			return fmt.Errorf("failed to create request: %w", err)
-		}
-
-		req.Header.Set("Authorization", fmt.Sprintf("Token %s", c.APIToken))
-		req.Header.Set("User-Agent", c.UserAgent)
-		req.Header.Set("Content-Type", contentType)
-		req.Header.Set("Accept", "application/json")
-
-		resp, err := c.HTTPClient.Do(req)
-		if err != nil {
-			lastErr = fmt.Errorf("request failed: %w", err)
-			// Always retry on transport-level errors (DNS, connection refused, timeout).
-			backoff(attempt)
-			continue
-		}
-
-		if isRetryable(resp.StatusCode) {
-			lastErr = parseError(resp)
-			resp.Body.Close()
-			backoff(attempt)
-			continue
-		}
-
-		if resp.StatusCode >= 400 {
-			err := parseError(resp)
-			resp.Body.Close()
-			return err
-		}
-
-		// No content (e.g. 204 on DELETE).
-		if resp.StatusCode == http.StatusNoContent || result == nil {
-			resp.Body.Close()
-			return nil
-		}
-
-		err = json.NewDecoder(resp.Body).Decode(result)
-		resp.Body.Close()
-		if err != nil {
-			return fmt.Errorf("failed to decode response: %w", err)
-		}
-
-		return nil
-	}
-
-	return lastErr
+	return c.execute(ctx, http.MethodPost, path, body.Bytes(), contentType, result)
 }
 
 // Do performs an HTTP request with JSON serialization, authentication, and retry logic.
 func (c *UbiOpsClient) Do(ctx context.Context, method, path string, body any, result any) error {
 	var bodyBytes []byte
+	var contentType string
 	if body != nil {
 		var err error
 		bodyBytes, err = json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("failed to marshal request body: %w", err)
 		}
+		contentType = "application/json"
 	}
 
+	return c.execute(ctx, method, path, bodyBytes, contentType, result)
+}
+
+// execute sends an HTTP request with retry/backoff, authentication headers, and JSON
+// decoding into result. contentType is set on the request only when non-empty.
+func (c *UbiOpsClient) execute(ctx context.Context, method, path string, bodyBytes []byte, contentType string, result any) error {
 	url := c.BaseURL + path
 
 	var lastErr error
@@ -213,8 +169,8 @@ func (c *UbiOpsClient) Do(ctx context.Context, method, path string, body any, re
 
 		req.Header.Set("Authorization", fmt.Sprintf("Token %s", c.APIToken))
 		req.Header.Set("User-Agent", c.UserAgent)
-		if body != nil {
-			req.Header.Set("Content-Type", "application/json")
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
 		}
 		req.Header.Set("Accept", "application/json")
 

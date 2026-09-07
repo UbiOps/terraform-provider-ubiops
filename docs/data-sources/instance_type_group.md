@@ -36,3 +36,4 @@ output "instance_type_group_name" {
 - `instance_types_json` (String) A list of instance types that are in this group
 - `name` (String) Name of the instance type group
 - `time_created` (String) The date when the instance type group was created
+- `time_updated` (String) The date when the instance type group was last updated

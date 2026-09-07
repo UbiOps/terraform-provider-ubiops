@@ -32,6 +32,9 @@ output "project_id" {
 ### Read-Only
 
 - `advanced_permissions` (Boolean) Boolean value indicating whether advanced permissions are enabled for the project
+- `cors_origins` (List of String) List of origins from which the requests are allowed for the project
 - `creation_date` (String) The date when the project was created
+- `credits` (Number) Maximum usage of credits, calculated by multiplying the credit rate of a deployment instance type by the number of hours they are running
 - `id` (String) Unique identifier for the project (UUID)
+- `labels` (Map of String) Dictionary containing key/value pairs where key indicates the label and value is the corresponding value of that label
 - `organization_name` (String) Name of the organization in which the project is created

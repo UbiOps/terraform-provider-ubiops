@@ -55,12 +55,22 @@ to learn about all the possible services and resources.**
     ]
   }
 
+  resource "ubiops_instance_type_group" "example" {
+    project_name = ubiops_project.example.name
+    name         = "my-instance-group"
+
+    instance_types_json = jsonencode([
+      { id = "256mb", priority = 1 }
+    ])
+  }
+
   resource "ubiops_deployment_version" "example" {
-    project_name    = ubiops_project.example.name
-    deployment_name = ubiops_deployment.example.name
-    version         = "v1"
-    environment     = "python3-13"
-    source_file     = "deployment_package.zip"
+    project_name             = ubiops_project.example.name
+    deployment_name          = ubiops_deployment.example.name
+    version                  = "v1"
+    environment              = "python3-13"
+    instance_type_group_name = ubiops_instance_type_group.example.name
+    source_file              = "deployment_package.zip"
   }
   ```
 

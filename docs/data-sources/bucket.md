@@ -34,7 +34,10 @@ output "bucket_id" {
 ### Read-Only
 
 - `bucket_provider` (String) Provider of the bucket
+- `configuration` (Map of String) Additional configuration details for the bucket
 - `creation_date` (String) The date when the bucket was created
 - `description` (String) Description of the bucket
 - `id` (String) Unique identifier for the bucket (UUID)
+- `labels` (Map of String) Dictionary containing key/value pairs where key indicates the label and value is the corresponding value of that label
+- `last_updated` (String) The date and time the bucket was last updated.
 - `ttl` (Number) Time to live for the files in the bucket
