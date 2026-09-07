@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sort"
 
 	"terraform-provider-ubiops/internal/client"
@@ -258,7 +259,7 @@ func (r *PipelineVersionResource) Configure(_ context.Context, req resource.Conf
 }
 
 func (r *PipelineVersionResource) basePath(projectName, pipelineName string) string {
-	return fmt.Sprintf("/projects/%s/pipelines/%s/versions", projectName, pipelineName)
+	return fmt.Sprintf("/projects/%s/pipelines/%s/versions", url.PathEscape(projectName), url.PathEscape(pipelineName))
 }
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -435,7 +436,7 @@ func (r *PipelineVersionResource) ImportState(ctx context.Context, req resource.
 // ── API → Terraform ───────────────────────────────────────────────────────────
 
 // readPipelineVersionResult maps the API response to the Terraform model.
-// Only the fields the user controls are extracted — API-only fields are discarded.
+// Only fields the user controls are extracted; API-only fields are discarded.
 func readPipelineVersionResult(ctx context.Context, result map[string]any, data *PipelineVersionResourceModel, diags *diag.Diagnostics) {
 	if v, ok := result["id"].(string); ok {
 		data.ID = types.StringValue(v)
@@ -477,16 +478,67 @@ func readPipelineVersionResult(ctx context.Context, result map[string]any, data 
 		data.Labels = types.MapNull(types.StringType)
 	}
 
-	// Objects.
-	data.Objects = pipelineObjectsFromAPI(result["objects"])
+	// Reorder objects/attachments to match the caller's known order - these
+	// are Optional non-Computed lists, so state must match config exactly.
+	objectsRefOrder := pipelineObjectRefOrder(ctx, data.Objects)
+	attachmentsRefOrder := pipelineAttachmentRefOrder(ctx, data.Attachments)
 
-	// Attachments.
-	data.Attachments = pipelineAttachmentsFromAPI(result["attachments"])
+	data.Objects = pipelineObjectsFromAPI(result["objects"], objectsRefOrder)
+	data.Attachments = pipelineAttachmentsFromAPI(result["attachments"], attachmentsRefOrder)
+}
+
+// pipelineObjectRefOrder extracts step names, in plan/state order.
+func pipelineObjectRefOrder(ctx context.Context, list types.List) []string {
+	if list.IsNull() || list.IsUnknown() {
+		return nil
+	}
+	var items []struct {
+		Name              string       `tfsdk:"name"`
+		ReferenceType     string       `tfsdk:"reference_type"`
+		ReferenceName     string       `tfsdk:"reference_name"`
+		Version           types.String `tfsdk:"version"`
+		ConfigurationJSON types.String `tfsdk:"configuration_json"`
+	}
+	if diags := list.ElementsAs(ctx, &items, false); diags.HasError() {
+		return nil
+	}
+	names := make([]string, len(items))
+	for i, it := range items {
+		names[i] = it.Name
+	}
+	return names
+}
+
+// pipelineAttachmentRefOrder extracts destination names, in plan/state order.
+func pipelineAttachmentRefOrder(ctx context.Context, list types.List) []string {
+	if list.IsNull() || list.IsUnknown() {
+		return nil
+	}
+	type mappingItem struct {
+		SourceFieldName      string `tfsdk:"source_field_name"`
+		DestinationFieldName string `tfsdk:"destination_field_name"`
+	}
+	type sourceItem struct {
+		SourceName string        `tfsdk:"source_name"`
+		Mapping    []mappingItem `tfsdk:"mapping"`
+	}
+	var items []struct {
+		DestinationName string       `tfsdk:"destination_name"`
+		Sources         []sourceItem `tfsdk:"sources"`
+	}
+	if diags := list.ElementsAs(ctx, &items, false); diags.HasError() {
+		return nil
+	}
+	names := make([]string, len(items))
+	for i, it := range items {
+		names[i] = it.DestinationName
+	}
+	return names
 }
 
 // pipelineObjectsFromAPI converts the API objects list to a types.List,
-// keeping only the fields the user controls (strips id, configuration, input_fields, etc.).
-func pipelineObjectsFromAPI(raw any) types.List {
+// keeping only user-controlled fields.
+func pipelineObjectsFromAPI(raw any, refOrder []string) types.List {
 	null := types.ListNull(pipelineObjectType)
 	if raw == nil {
 		return null
@@ -496,13 +548,23 @@ func pipelineObjectsFromAPI(raw any) types.List {
 		return null
 	}
 
-	vals := make([]attr.Value, 0, len(items))
+	byName := make(map[string]map[string]any, len(items))
+	names := make([]string, 0, len(items))
 	for _, item := range items {
 		m, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
 		name, _ := m["name"].(string)
+		byName[name] = m
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	order := orderByRef(names, refOrder)
+
+	vals := make([]attr.Value, 0, len(order))
+	for _, name := range order {
+		m := byName[name]
 		refType, _ := m["reference_type"].(string)
 		refName, _ := m["reference_name"].(string)
 
@@ -547,9 +609,9 @@ func pipelineObjectsFromAPI(raw any) types.List {
 	return v
 }
 
-// pipelineAttachmentsFromAPI converts the API attachments list to a types.List,
-// keeping only destination_name, source_name, and field mappings.
-func pipelineAttachmentsFromAPI(raw any) types.List {
+// pipelineAttachmentsFromAPI converts the API attachments list to a
+// types.List, keeping only destination_name, source_name, and field mappings.
+func pipelineAttachmentsFromAPI(raw any, refOrder []string) types.List {
 	null := types.ListNull(pipelineAttachmentType)
 	if raw == nil {
 		return null
@@ -559,24 +621,23 @@ func pipelineAttachmentsFromAPI(raw any) types.List {
 		return null
 	}
 
-	// Sort by destination_name for deterministic ordering - the API may return
-	// attachments in a different order than configured, and unsorted state trips
-	// Terraform's post-apply consistency check.
-	sort.Slice(items, func(i, j int) bool {
-		mi, _ := items[i].(map[string]any)
-		mj, _ := items[j].(map[string]any)
-		di, _ := mi["destination_name"].(string)
-		dj, _ := mj["destination_name"].(string)
-		return di < dj
-	})
-
-	attachVals := make([]attr.Value, 0, len(items))
+	byDest := make(map[string]map[string]any, len(items))
+	dests := make([]string, 0, len(items))
 	for _, item := range items {
 		m, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
 		destName, _ := m["destination_name"].(string)
+		byDest[destName] = m
+		dests = append(dests, destName)
+	}
+	sort.Strings(dests)
+	order := orderByRef(dests, refOrder)
+
+	attachVals := make([]attr.Value, 0, len(order))
+	for _, destName := range order {
+		m := byDest[destName]
 
 		// sources
 		var sourceVals []attr.Value
@@ -625,6 +686,30 @@ func pipelineAttachmentsFromAPI(raw any) types.List {
 
 	v, _ := types.ListValue(pipelineAttachmentType, attachVals)
 	return v
+}
+
+// orderByRef reorders keys to match refOrder, appending unmatched keys (sorted) at the end.
+func orderByRef(keys []string, refOrder []string) []string {
+	present := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		present[k] = true
+	}
+
+	ordered := make([]string, 0, len(keys))
+	seen := make(map[string]bool, len(keys))
+	for _, k := range refOrder {
+		if present[k] && !seen[k] {
+			ordered = append(ordered, k)
+			seen[k] = true
+		}
+	}
+	for _, k := range keys {
+		if !seen[k] {
+			ordered = append(ordered, k)
+			seen[k] = true
+		}
+	}
+	return ordered
 }
 
 // ── Terraform → API ───────────────────────────────────────────────────────────
