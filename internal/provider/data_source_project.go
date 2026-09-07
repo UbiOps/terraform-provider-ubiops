@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"terraform-provider-ubiops/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -34,6 +35,9 @@ type ProjectDataSourceModel struct {
 	Name                types.String `tfsdk:"name"`
 	OrganizationName    types.String `tfsdk:"organization_name"`
 	AdvancedPermissions types.Bool   `tfsdk:"advanced_permissions"`
+	Credits             types.Number `tfsdk:"credits"`
+	CORSOrigins         types.List   `tfsdk:"cors_origins"`
+	Labels              types.Map    `tfsdk:"labels"`
 	CreationDate        types.String `tfsdk:"creation_date"`
 }
 
@@ -61,6 +65,20 @@ func (d *ProjectDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 			"advanced_permissions": schema.BoolAttribute{
 				MarkdownDescription: "Boolean value indicating whether advanced permissions are enabled for the project",
 				Computed:            true,
+			},
+			"credits": schema.NumberAttribute{
+				MarkdownDescription: "Maximum usage of credits, calculated by multiplying the credit rate of a deployment instance type by the number of hours they are running",
+				Computed:            true,
+			},
+			"cors_origins": schema.ListAttribute{
+				MarkdownDescription: "List of origins from which the requests are allowed for the project",
+				Computed:            true,
+				ElementType:         types.StringType,
+			},
+			"labels": schema.MapAttribute{
+				MarkdownDescription: "Dictionary containing key/value pairs where key indicates the label and value is the corresponding value of that label",
+				Computed:            true,
+				ElementType:         types.StringType,
 			},
 			"creation_date": schema.StringAttribute{
 				MarkdownDescription: "The date when the project was created",
@@ -96,7 +114,7 @@ func (d *ProjectDataSource) Read(ctx context.Context, req datasource.ReadRequest
 	}
 
 	var result map[string]any
-	err := d.client.Get(ctx, fmt.Sprintf("/projects/%s", data.Name.ValueString()), &result)
+	err := d.client.Get(ctx, fmt.Sprintf("/projects/%s", url.PathEscape(data.Name.ValueString())), &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading project", err.Error())
 		return
@@ -113,6 +131,51 @@ func (d *ProjectDataSource) Read(ctx context.Context, req datasource.ReadRequest
 	}
 	if v, ok := result["creation_date"].(string); ok {
 		data.CreationDate = types.StringValue(v)
+	}
+
+	// Credits can be null.
+	if v, ok := result["credits"]; ok && v != nil {
+		if f, ok := v.(float64); ok {
+			data.Credits = types.NumberValue((&types.Number{}).ValueBigFloat().SetFloat64(f))
+		}
+	} else {
+		data.Credits = types.NumberNull()
+	}
+
+	// CORS origins: treat empty list same as absent (null) so Optional-only fields stay consistent.
+	if v, ok := result["cors_origins"]; ok && v != nil {
+		if origins, ok := v.([]any); ok && len(origins) > 0 {
+			vals := make([]types.String, 0, len(origins))
+			for _, o := range origins {
+				if s, ok := o.(string); ok {
+					vals = append(vals, types.StringValue(s))
+				}
+			}
+			list, _ := types.ListValueFrom(ctx, types.StringType, vals)
+			data.CORSOrigins = list
+		} else {
+			data.CORSOrigins = types.ListNull(types.StringType)
+		}
+	} else {
+		data.CORSOrigins = types.ListNull(types.StringType)
+	}
+
+	// Labels: treat empty map same as absent (null) so Optional-only fields stay consistent.
+	if v, ok := result["labels"]; ok && v != nil {
+		if labelsMap, ok := v.(map[string]any); ok && len(labelsMap) > 0 {
+			vals := make(map[string]string, len(labelsMap))
+			for k, val := range labelsMap {
+				if s, ok := val.(string); ok {
+					vals[k] = s
+				}
+			}
+			m, _ := types.MapValueFrom(ctx, types.StringType, vals)
+			data.Labels = m
+		} else {
+			data.Labels = types.MapNull(types.StringType)
+		}
+	} else {
+		data.Labels = types.MapNull(types.StringType)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

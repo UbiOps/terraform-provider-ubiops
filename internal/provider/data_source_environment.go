@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"terraform-provider-ubiops/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -30,13 +31,16 @@ type EnvironmentDataSource struct {
 
 // EnvironmentDataSourceModel maps the data source schema to Go types.
 type EnvironmentDataSourceModel struct {
-	ID              types.String `tfsdk:"id"`
-	ProjectName     types.String `tfsdk:"project_name"`
-	Name            types.String `tfsdk:"name"`
-	DisplayName     types.String `tfsdk:"display_name"`
-	BaseEnvironment types.String `tfsdk:"base_environment"`
-	Description     types.String `tfsdk:"description"`
-	CreationDate    types.String `tfsdk:"creation_date"`
+	ID                    types.String `tfsdk:"id"`
+	ProjectName           types.String `tfsdk:"project_name"`
+	Name                  types.String `tfsdk:"name"`
+	DisplayName           types.String `tfsdk:"display_name"`
+	BaseEnvironment       types.String `tfsdk:"base_environment"`
+	Description           types.String `tfsdk:"description"`
+	SupportsRequestFormat types.Bool   `tfsdk:"supports_request_format"`
+	Labels                types.Map    `tfsdk:"labels"`
+	CreationDate          types.String `tfsdk:"creation_date"`
+	LastUpdated           types.String `tfsdk:"last_updated"`
 }
 
 func (d *EnvironmentDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -72,8 +76,21 @@ func (d *EnvironmentDataSource) Schema(ctx context.Context, req datasource.Schem
 				MarkdownDescription: "Description of the environment",
 				Computed:            true,
 			},
+			"supports_request_format": schema.BoolAttribute{
+				MarkdownDescription: "Whether the environment supports UbiOps's structured request format (queuing, autoscaling, scheduled requests). Must match the `supports_request_format` of any deployment using this environment, or version creation fails.",
+				Computed:            true,
+			},
+			"labels": schema.MapAttribute{
+				MarkdownDescription: "Dictionary containing key/value pairs where key indicates the label and value is the corresponding value of that label",
+				Computed:            true,
+				ElementType:         types.StringType,
+			},
 			"creation_date": schema.StringAttribute{
 				MarkdownDescription: "The date when the environment was created",
+				Computed:            true,
+			},
+			"last_updated": schema.StringAttribute{
+				MarkdownDescription: "The date when the environment was last updated",
 				Computed:            true,
 			},
 		},
@@ -106,7 +123,7 @@ func (d *EnvironmentDataSource) Read(ctx context.Context, req datasource.ReadReq
 	}
 
 	var result map[string]any
-	err := d.client.Get(ctx, fmt.Sprintf("/projects/%s/environments/%s", data.ProjectName.ValueString(), data.Name.ValueString()), &result)
+	err := d.client.Get(ctx, fmt.Sprintf("/projects/%s/environments/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.Name.ValueString())), &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading environment", err.Error())
 		return
@@ -126,6 +143,29 @@ func (d *EnvironmentDataSource) Read(ctx context.Context, req datasource.ReadReq
 	}
 	if v, ok := result["creation_date"].(string); ok {
 		data.CreationDate = types.StringValue(v)
+	}
+	if v, ok := result["supports_request_format"].(bool); ok {
+		data.SupportsRequestFormat = types.BoolValue(v)
+	}
+	if v, ok := result["last_updated"].(string); ok {
+		data.LastUpdated = types.StringValue(v)
+	}
+
+	if v, ok := result["labels"]; ok && v != nil {
+		if labelsMap, ok := v.(map[string]any); ok && len(labelsMap) > 0 {
+			vals := make(map[string]string, len(labelsMap))
+			for k, val := range labelsMap {
+				if s, ok := val.(string); ok {
+					vals[k] = s
+				}
+			}
+			m, _ := types.MapValueFrom(ctx, types.StringType, vals)
+			data.Labels = m
+		} else {
+			data.Labels = types.MapNull(types.StringType)
+		}
+	} else {
+		data.Labels = types.MapNull(types.StringType)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

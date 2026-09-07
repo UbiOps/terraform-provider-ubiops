@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"terraform-provider-ubiops/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -30,15 +31,21 @@ type ServiceDataSource struct {
 
 // ServiceDataSourceModel maps the data source schema to Go types.
 type ServiceDataSourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	ProjectName types.String `tfsdk:"project_name"`
-	Name        types.String `tfsdk:"name"`
-	Description types.String `tfsdk:"description"`
-	Deployment  types.String `tfsdk:"deployment"`
-	Version     types.String `tfsdk:"version"`
-	Port        types.Int64  `tfsdk:"port"`
-	Endpoint    types.String `tfsdk:"endpoint"`
-	TimeCreated types.String `tfsdk:"time_created"`
+	ID                      types.String `tfsdk:"id"`
+	ProjectName             types.String `tfsdk:"project_name"`
+	Name                    types.String `tfsdk:"name"`
+	Description             types.String `tfsdk:"description"`
+	Deployment              types.String `tfsdk:"deployment"`
+	Version                 types.String `tfsdk:"version"`
+	Port                    types.Int64  `tfsdk:"port"`
+	AuthenticationRequired  types.Bool   `tfsdk:"authentication_required"`
+	AuthMethodTokenEnabled  types.Bool   `tfsdk:"authentication_method_token_enabled"`
+	RateLimitToken          types.Int64  `tfsdk:"rate_limit_token"`
+	RequestLoggingExclPaths types.String `tfsdk:"request_logging_excluded_paths"`
+	Endpoint                types.String `tfsdk:"endpoint"`
+	Labels                  types.Map    `tfsdk:"labels"`
+	TimeCreated             types.String `tfsdk:"time_created"`
+	TimeUpdated             types.String `tfsdk:"time_updated"`
 }
 
 func (d *ServiceDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -78,12 +85,37 @@ func (d *ServiceDataSource) Schema(ctx context.Context, req datasource.SchemaReq
 				MarkdownDescription: "Port on which the deployment listens for the service",
 				Computed:            true,
 			},
+			"authentication_required": schema.BoolAttribute{
+				MarkdownDescription: "Whether authentication is required on this service",
+				Computed:            true,
+			},
+			"authentication_method_token_enabled": schema.BoolAttribute{
+				MarkdownDescription: "Whether authentication with a token is enabled",
+				Computed:            true,
+			},
+			"rate_limit_token": schema.Int64Attribute{
+				MarkdownDescription: "Rate limit for the service per authentication token",
+				Computed:            true,
+			},
+			"request_logging_excluded_paths": schema.StringAttribute{
+				MarkdownDescription: "A regex to exclude paths when storing requests",
+				Computed:            true,
+			},
 			"endpoint": schema.StringAttribute{
 				MarkdownDescription: "Endpoint of the service",
 				Computed:            true,
 			},
+			"labels": schema.MapAttribute{
+				MarkdownDescription: "Dictionary containing key/value pairs where key indicates the label and value is the corresponding value of that label",
+				Computed:            true,
+				ElementType:         types.StringType,
+			},
 			"time_created": schema.StringAttribute{
 				MarkdownDescription: "The date when the service was created",
+				Computed:            true,
+			},
+			"time_updated": schema.StringAttribute{
+				MarkdownDescription: "The date when the service was last updated",
 				Computed:            true,
 			},
 		},
@@ -116,7 +148,7 @@ func (d *ServiceDataSource) Read(ctx context.Context, req datasource.ReadRequest
 	}
 
 	var result map[string]any
-	err := d.client.Get(ctx, fmt.Sprintf("/projects/%s/services/%s", data.ProjectName.ValueString(), data.Name.ValueString()), &result)
+	err := d.client.Get(ctx, fmt.Sprintf("/projects/%s/services/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.Name.ValueString())), &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading service", err.Error())
 		return
@@ -134,8 +166,19 @@ func (d *ServiceDataSource) Read(ctx context.Context, req datasource.ReadRequest
 	if v, ok := result["time_created"].(string); ok {
 		data.TimeCreated = types.StringValue(v)
 	}
+	if v, ok := result["time_updated"].(string); ok {
+		data.TimeUpdated = types.StringValue(v)
+	}
+	if v, ok := result["request_logging_excluded_paths"].(string); ok {
+		data.RequestLoggingExclPaths = types.StringValue(v)
+	} else {
+		data.RequestLoggingExclPaths = types.StringNull()
+	}
 
 	readInt64Field(result, "port", &data.Port)
+	readInt64Field(result, "rate_limit_token", &data.RateLimitToken)
+	readBoolField(result, "authentication_required", &data.AuthenticationRequired)
+	readBoolField(result, "authentication_method_token_enabled", &data.AuthMethodTokenEnabled)
 
 	if v, ok := result["version"]; ok && v != nil {
 		if s, ok := v.(string); ok {
@@ -151,6 +194,23 @@ func (d *ServiceDataSource) Read(ctx context.Context, req datasource.ReadRequest
 		}
 	} else {
 		data.Endpoint = types.StringNull()
+	}
+
+	if v, ok := result["labels"]; ok && v != nil {
+		if labelsMap, ok := v.(map[string]any); ok && len(labelsMap) > 0 {
+			vals := make(map[string]string, len(labelsMap))
+			for k, val := range labelsMap {
+				if s, ok := val.(string); ok {
+					vals[k] = s
+				}
+			}
+			m, _ := types.MapValueFrom(ctx, types.StringType, vals)
+			data.Labels = m
+		} else {
+			data.Labels = types.MapNull(types.StringType)
+		}
+	} else {
+		data.Labels = types.MapNull(types.StringType)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

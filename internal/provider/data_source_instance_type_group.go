@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"terraform-provider-ubiops/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -36,6 +37,7 @@ type InstanceTypeGroupDataSourceModel struct {
 	Name              types.String `tfsdk:"name"`
 	InstanceTypesJSON types.String `tfsdk:"instance_types_json"`
 	TimeCreated       types.String `tfsdk:"time_created"`
+	TimeUpdated       types.String `tfsdk:"time_updated"`
 }
 
 func (d *InstanceTypeGroupDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -65,6 +67,10 @@ func (d *InstanceTypeGroupDataSource) Schema(ctx context.Context, req datasource
 			},
 			"time_created": schema.StringAttribute{
 				MarkdownDescription: "The date when the instance type group was created",
+				Computed:            true,
+			},
+			"time_updated": schema.StringAttribute{
+				MarkdownDescription: "The date when the instance type group was last updated",
 				Computed:            true,
 			},
 		},
@@ -97,7 +103,7 @@ func (d *InstanceTypeGroupDataSource) Read(ctx context.Context, req datasource.R
 	}
 
 	var result map[string]any
-	err := d.client.Get(ctx, fmt.Sprintf("/projects/%s/instance-type-groups/%s", data.ProjectName.ValueString(), data.ID.ValueString()), &result)
+	err := d.client.Get(ctx, fmt.Sprintf("/projects/%s/instance-type-groups/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.ID.ValueString())), &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading instance type group", err.Error())
 		return
@@ -108,6 +114,9 @@ func (d *InstanceTypeGroupDataSource) Read(ctx context.Context, req datasource.R
 	}
 	if v, ok := result["time_created"].(string); ok {
 		data.TimeCreated = types.StringValue(v)
+	}
+	if v, ok := result["time_updated"].(string); ok {
+		data.TimeUpdated = types.StringValue(v)
 	}
 
 	if v, ok := result["instance_types"]; ok && v != nil {
