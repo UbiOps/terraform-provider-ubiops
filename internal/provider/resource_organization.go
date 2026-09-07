@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"terraform-provider-ubiops/internal/client"
@@ -147,7 +148,7 @@ func (r *OrganizationResource) Read(ctx context.Context, req resource.ReadReques
 	}
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/organizations/%s", data.Name.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/organizations/%s", url.PathEscape(data.Name.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -194,7 +195,7 @@ func (r *OrganizationResource) Update(ctx context.Context, req resource.UpdateRe
 	}
 
 	var result map[string]any
-	err := r.client.Patch(ctx, fmt.Sprintf("/organizations/%s", state.Name.ValueString()), body, &result)
+	err := r.client.Patch(ctx, fmt.Sprintf("/organizations/%s", url.PathEscape(state.Name.ValueString())), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating organization", err.Error())
 		return
@@ -258,6 +259,8 @@ func readOrganizationResult(result map[string]any, data *OrganizationResourceMod
 	}
 	if v, ok := result["subscription"].(string); ok {
 		data.Subscription = types.StringValue(v)
+	} else {
+		data.Subscription = types.StringNull()
 	}
 
 	readBoolField(result, "two_factor_authentication_forced", &data.TwoFactorAuthenticationForced)

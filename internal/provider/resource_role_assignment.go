@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"terraform-provider-ubiops/internal/client"
 
@@ -132,7 +133,7 @@ func (r *RoleAssignmentResource) Create(ctx context.Context, req resource.Create
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/role-assignments", projectName), body, &result)
+	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/role-assignments", url.PathEscape(projectName)), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating role assignment", err.Error())
 		return
@@ -156,7 +157,7 @@ func (r *RoleAssignmentResource) Read(ctx context.Context, req resource.ReadRequ
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/role-assignments/%s", projectName, data.ID.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/role-assignments/%s", url.PathEscape(projectName), url.PathEscape(data.ID.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -184,7 +185,7 @@ func (r *RoleAssignmentResource) Delete(ctx context.Context, req resource.Delete
 		return
 	}
 
-	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/role-assignments/%s", data.ProjectName.ValueString(), data.ID.ValueString()))
+	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/role-assignments/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.ID.ValueString())))
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting role assignment", err.Error())
 		return
@@ -213,8 +214,12 @@ func readRoleAssignmentResult(result map[string]any, data *RoleAssignmentResourc
 	}
 	if v, ok := result["resource"].(string); ok {
 		data.Resource = types.StringValue(v)
+	} else {
+		data.Resource = types.StringNull()
 	}
 	if v, ok := result["resource_type"].(string); ok {
 		data.ResourceType = types.StringValue(v)
+	} else {
+		data.ResourceType = types.StringNull()
 	}
 }

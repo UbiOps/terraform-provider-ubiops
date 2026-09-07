@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"terraform-provider-ubiops/internal/client"
 
@@ -184,7 +185,7 @@ func (r *ServiceResource) Create(ctx context.Context, req resource.CreateRequest
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/services", projectName), body, &result)
+	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/services", url.PathEscape(projectName)), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating service", err.Error())
 		return
@@ -208,7 +209,7 @@ func (r *ServiceResource) Read(ctx context.Context, req resource.ReadRequest, re
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/services/%s", projectName, data.Name.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/services/%s", url.PathEscape(projectName), url.PathEscape(data.Name.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -268,7 +269,7 @@ func (r *ServiceResource) Update(ctx context.Context, req resource.UpdateRequest
 	projectName := state.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/services/%s", projectName, state.Name.ValueString()), body, &result)
+	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/services/%s", url.PathEscape(projectName), url.PathEscape(state.Name.ValueString())), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating service", err.Error())
 		return
@@ -289,7 +290,7 @@ func (r *ServiceResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/services/%s", data.ProjectName.ValueString(), data.Name.ValueString()))
+	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/services/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.Name.ValueString())))
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting service", err.Error())
 		return
@@ -324,6 +325,8 @@ func readServiceResult(ctx context.Context, result map[string]any, data *Service
 	}
 	if v, ok := result["request_logging_excluded_paths"].(string); ok {
 		data.RequestLoggingExclPaths = types.StringValue(v)
+	} else {
+		data.RequestLoggingExclPaths = types.StringNull()
 	}
 
 	readInt64Field(result, "port", &data.Port)

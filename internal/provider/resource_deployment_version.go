@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -230,7 +231,7 @@ func (r *DeploymentVersionResource) Configure(ctx context.Context, req resource.
 }
 
 func (r *DeploymentVersionResource) basePath(projectName, deploymentName string) string {
-	return fmt.Sprintf("/projects/%s/deployments/%s/versions", projectName, deploymentName)
+	return fmt.Sprintf("/projects/%s/deployments/%s/versions", url.PathEscape(projectName), url.PathEscape(deploymentName))
 }
 
 // timeout/interval for postVersion's polling.
@@ -239,8 +240,8 @@ const (
 	deploymentNotFoundRetryInterval = 2 * time.Second
 )
 
-// postVersion retries the create POST until the deployment exists. depends_on would
-// deadlock instead of helping - see blue-green-rollout's main.tf for why.
+// postVersion retries the create POST until the deployment exists - depends_on
+// would deadlock instead of helping (see blue-green-rollout's main.tf).
 func (r *DeploymentVersionResource) postVersion(ctx context.Context, path string, body map[string]any, result *map[string]any) error {
 	deadline := time.Now().Add(deploymentNotFoundRetryTimeout)
 	for {
@@ -313,9 +314,8 @@ func (r *DeploymentVersionResource) Create(ctx context.Context, req resource.Cre
 
 	readDeploymentVersionResult(ctx, result, &data)
 
-	// The create response omits source_file_sha256; only the upload branch below
-	// sets it. Without an upload, resolve it to null instead of leaving it Unknown,
-	// which Terraform rejects.
+	// No upload means no source_file_sha256 in the response; resolve to
+	// null (not Unknown), which Terraform would reject.
 	if data.SourceFile.IsNull() || data.SourceFile.IsUnknown() {
 		data.SourceFileSHA256 = types.StringNull()
 	}
@@ -454,8 +454,7 @@ func (r *DeploymentVersionResource) Delete(ctx context.Context, req resource.Del
 	path := fmt.Sprintf("%s/%s", bp, data.Version.ValueString())
 	err := r.client.Delete(ctx, path)
 	if err != nil {
-		// deployment delete cascades to versions and can race this call - treat
-		// already-gone as success.
+		// deployment delete cascades to versions and can race this call - treat already-gone as success.
 		var getResult map[string]any
 		if getErr := r.client.Get(ctx, path, &getResult); getErr != nil {
 			var apiErr *client.UbiOpsError
@@ -471,9 +470,8 @@ func (r *DeploymentVersionResource) Delete(ctx context.Context, req resource.Del
 	tflog.Trace(ctx, "deleted deployment version", map[string]any{"version": data.Version.ValueString()})
 }
 
-// uploadRevision uploads the deployment package zip to the revisions endpoint.
-// Returns the created revision's ID (empty string if the API response didn't
-// include one, e.g. an unexpected response shape) for waitForBuild to poll.
+// uploadRevision uploads the deployment package zip and returns the created
+// revision's ID (empty if the response didn't include one) for waitForBuild to poll.
 func (r *DeploymentVersionResource) uploadRevision(ctx context.Context, data *DeploymentVersionResourceModel, diags *diag.Diagnostics) string {
 	filePath := data.SourceFile.ValueString()
 
@@ -488,12 +486,7 @@ func (r *DeploymentVersionResource) uploadRevision(ctx context.Context, data *De
 		data.SourceFileSHA256 = types.StringValue(hash)
 	}
 
-	revisionPath := fmt.Sprintf(
-		"/projects/%s/deployments/%s/versions/%s/revisions",
-		data.ProjectName.ValueString(),
-		data.DeploymentName.ValueString(),
-		data.Version.ValueString(),
-	)
+	revisionPath := fmt.Sprintf("/projects/%s/deployments/%s/versions/%s/revisions", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.DeploymentName.ValueString()), url.PathEscape(data.Version.ValueString()))
 
 	var result map[string]any
 	err = r.client.Upload(ctx, revisionPath, filePath, &result)
@@ -512,9 +505,8 @@ func (r *DeploymentVersionResource) uploadRevision(ctx context.Context, data *De
 	return revisionID
 }
 
-// waitForBuild polls the revision's build status, not the version's aggregate status -
-// that field tracks serving-instance availability, which stays false whenever
-// minimum_instances == 0. Falls back to version-status polling if revisionID is empty.
+// waitForBuild polls the revision's build status, not the version's
+// aggregate status; falls back to version-status polling if revisionID is empty.
 func (r *DeploymentVersionResource) waitForBuild(ctx context.Context, data *DeploymentVersionResourceModel, revisionID string, diags *diag.Diagnostics) {
 	timeoutSecs := data.BuildTimeout.ValueInt64()
 	if timeoutSecs == 0 {
@@ -611,9 +603,13 @@ func readDeploymentVersionResult(ctx context.Context, result map[string]any, dat
 	}
 	if v, ok := result["environment"].(string); ok {
 		data.Environment = types.StringValue(v)
+	} else {
+		data.Environment = types.StringNull()
 	}
 	if v, ok := result["instance_type_group_name"].(string); ok {
 		data.InstanceTypeGroupName = types.StringValue(v)
+	} else {
+		data.InstanceTypeGroupName = types.StringNull()
 	}
 	if v, ok := result["request_retention_mode"].(string); ok {
 		data.RequestRetentionMode = types.StringValue(v)
@@ -632,13 +628,15 @@ func readDeploymentVersionResult(ctx context.Context, result map[string]any, dat
 	readInt64Field(result, "maximum_instances", &data.MaximumInstances)
 	readInt64Field(result, "maximum_idle_time", &data.MaximumIdleTime)
 	readInt64Field(result, "maximum_queue_size", &data.MaximumQueueSize)
+	if _, ok := result["maximum_queue_size"].(float64); !ok {
+		data.MaximumQueueSize = types.Int64Null()
+	}
 	readInt64Field(result, "instance_processes", &data.InstanceProcesses)
 	readInt64Field(result, "request_retention_time", &data.RequestRetentionTime)
 
 	readBoolField(result, "static_ip", &data.StaticIP)
 	readBoolField(result, "restart_request_interruption", &data.RestartRequestInterruption)
 
-	// Labels.
 	// Labels: treat empty map same as absent so Optional-only field stays consistent.
 	if v, ok := result["labels"]; ok && v != nil {
 		if labelsMap, ok := v.(map[string]any); ok && len(labelsMap) > 0 {
