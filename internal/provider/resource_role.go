@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"terraform-provider-ubiops/internal/client"
 
@@ -103,7 +104,7 @@ func (r *RoleResource) Create(ctx context.Context, req resource.CreateRequest, r
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/roles", projectName), body, &result)
+	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/roles", url.PathEscape(projectName)), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating role", err.Error())
 		return
@@ -127,7 +128,7 @@ func (r *RoleResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/roles/%s", projectName, data.Name.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/roles/%s", url.PathEscape(projectName), url.PathEscape(data.Name.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -168,7 +169,7 @@ func (r *RoleResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	projectName := state.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/roles/%s", projectName, state.Name.ValueString()), body, &result)
+	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/roles/%s", url.PathEscape(projectName), url.PathEscape(state.Name.ValueString())), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating role", err.Error())
 		return
@@ -189,7 +190,7 @@ func (r *RoleResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		return
 	}
 
-	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/roles/%s", data.ProjectName.ValueString(), data.Name.ValueString()))
+	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/roles/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.Name.ValueString())))
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting role", err.Error())
 		return

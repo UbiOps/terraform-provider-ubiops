@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"terraform-provider-ubiops/internal/client"
 
@@ -108,7 +109,7 @@ func (r *ProjectEnvironmentVariableResource) Create(ctx context.Context, req res
 	}
 
 	var result map[string]any
-	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/environment-variables", data.ProjectName.ValueString()), body, &result)
+	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/environment-variables", url.PathEscape(data.ProjectName.ValueString())), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating environment variable", err.Error())
 		return
@@ -129,7 +130,7 @@ func (r *ProjectEnvironmentVariableResource) Read(ctx context.Context, req resou
 	}
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/environment-variables/%s", data.ProjectName.ValueString(), data.ID.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/environment-variables/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.ID.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -167,7 +168,7 @@ func (r *ProjectEnvironmentVariableResource) Update(ctx context.Context, req res
 	}
 
 	var result map[string]any
-	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/environment-variables/%s", state.ProjectName.ValueString(), state.ID.ValueString()), body, &result)
+	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/environment-variables/%s", url.PathEscape(state.ProjectName.ValueString()), url.PathEscape(state.ID.ValueString())), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating environment variable", err.Error())
 		return
@@ -187,7 +188,7 @@ func (r *ProjectEnvironmentVariableResource) Delete(ctx context.Context, req res
 		return
 	}
 
-	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/environment-variables/%s", data.ProjectName.ValueString(), data.ID.ValueString()))
+	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/environment-variables/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.ID.ValueString())))
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting environment variable", err.Error())
 		return

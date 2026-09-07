@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"terraform-provider-ubiops/internal/client"
 
@@ -171,7 +172,7 @@ func (r *ProjectResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s", data.Name.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s", url.PathEscape(data.Name.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -242,7 +243,7 @@ func (r *ProjectResource) Update(ctx context.Context, req resource.UpdateRequest
 
 	// Use the current name from state for the API path (name may be changing).
 	var result map[string]any
-	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s", state.Name.ValueString()), body, &result)
+	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s", url.PathEscape(state.Name.ValueString())), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating project", err.Error())
 		return
@@ -262,7 +263,7 @@ func (r *ProjectResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s", data.Name.ValueString()))
+	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s", url.PathEscape(data.Name.ValueString())))
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting project", err.Error())
 		return
@@ -302,8 +303,6 @@ func readProjectResult(_ context.Context, result map[string]any, data *ProjectRe
 		data.Credits = types.NumberNull()
 	}
 
-	// CORS origins come back as a string or list depending on the endpoint — handle both.
-	// The API returns cors_origins as a list in the response.
 	// CORS origins: treat empty list same as absent (null) so Optional-only fields stay consistent.
 	if v, ok := result["cors_origins"]; ok && v != nil {
 		if origins, ok := v.([]any); ok && len(origins) > 0 {
@@ -322,7 +321,6 @@ func readProjectResult(_ context.Context, result map[string]any, data *ProjectRe
 		data.CORSOrigins = types.ListNull(types.StringType)
 	}
 
-	// Labels.
 	// Labels: treat empty map same as absent (null) so Optional-only fields stay consistent.
 	if v, ok := result["labels"]; ok && v != nil {
 		if labelsMap, ok := v.(map[string]any); ok && len(labelsMap) > 0 {

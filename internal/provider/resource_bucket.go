@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"terraform-provider-ubiops/internal/client"
 
@@ -184,7 +185,7 @@ func (r *BucketResource) Create(ctx context.Context, req resource.CreateRequest,
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/buckets", projectName), body, &result)
+	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/buckets", url.PathEscape(projectName)), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating bucket", err.Error())
 		return
@@ -208,7 +209,7 @@ func (r *BucketResource) Read(ctx context.Context, req resource.ReadRequest, res
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/buckets/%s", projectName, data.Name.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/buckets/%s", url.PathEscape(projectName), url.PathEscape(data.Name.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -287,7 +288,7 @@ func (r *BucketResource) Update(ctx context.Context, req resource.UpdateRequest,
 	projectName := state.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/buckets/%s", projectName, state.Name.ValueString()), body, &result)
+	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/buckets/%s", url.PathEscape(projectName), url.PathEscape(state.Name.ValueString())), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating bucket", err.Error())
 		return
@@ -308,7 +309,7 @@ func (r *BucketResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		return
 	}
 
-	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/buckets/%s", data.ProjectName.ValueString(), data.Name.ValueString()))
+	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/buckets/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.Name.ValueString())))
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting bucket", err.Error())
 		return

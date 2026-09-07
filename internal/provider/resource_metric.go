@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"terraform-provider-ubiops/internal/client"
@@ -153,7 +154,7 @@ func (r *MetricResource) Create(ctx context.Context, req resource.CreateRequest,
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/metrics", projectName), body, &result)
+	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/metrics", url.PathEscape(projectName)), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating metric", err.Error())
 		return
@@ -177,7 +178,7 @@ func (r *MetricResource) Read(ctx context.Context, req resource.ReadRequest, res
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/metrics/%s", projectName, data.Name.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/metrics/%s", url.PathEscape(projectName), url.PathEscape(data.Name.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -224,7 +225,7 @@ func (r *MetricResource) Update(ctx context.Context, req resource.UpdateRequest,
 	projectName := state.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/metrics/%s", projectName, state.Name.ValueString()), body, &result)
+	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/metrics/%s", url.PathEscape(projectName), url.PathEscape(state.Name.ValueString())), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating metric", err.Error())
 		return
@@ -245,7 +246,7 @@ func (r *MetricResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		return
 	}
 
-	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/metrics/%s", data.ProjectName.ValueString(), data.Name.ValueString()))
+	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/metrics/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.Name.ValueString())))
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting metric", err.Error())
 		return
@@ -270,8 +271,8 @@ func readMetricResult(ctx context.Context, result map[string]any, data *MetricRe
 		data.Description = types.StringValue(v)
 	}
 	if v, ok := result["metric_type"].(string); ok {
-		// The API accepts and returns lowercase ("gauge", "delta"); normalise
-		// defensively in case the API ever echoes back a different case.
+		// Normalise defensively in case the API ever echoes back a different case
+		// than lowercase ("gauge", "delta").
 		data.MetricType = types.StringValue(strings.ToLower(v))
 	}
 	if v, ok := result["unit"].(string); ok {

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"terraform-provider-ubiops/internal/client"
@@ -263,14 +264,14 @@ func (r *DeploymentResource) Create(ctx context.Context, req resource.CreateRequ
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/deployments", projectName), body, &result)
+	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/deployments", url.PathEscape(projectName)), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating deployment", err.Error())
 		return
 	}
 
-	// Capture default_version before readDeploymentResult resets it to null - the create
-	// response never includes it (see waitForDefaultVersion).
+	// Capture default_version before readDeploymentResult resets it to null - the
+	// create response never includes it (see waitForDefaultVersion).
 	wantDefaultVersion := data.DefaultVersion
 
 	readDeploymentResult(ctx, result, &data)
@@ -295,7 +296,7 @@ const (
 
 // waitForDefaultVersion polls until default_version becomes want (create never sets it).
 func (r *DeploymentResource) waitForDefaultVersion(ctx context.Context, data *DeploymentResourceModel, want string, diags *diag.Diagnostics) {
-	path := fmt.Sprintf("/projects/%s/deployments/%s", data.ProjectName.ValueString(), data.Name.ValueString())
+	path := fmt.Sprintf("/projects/%s/deployments/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.Name.ValueString()))
 	deadline := time.Now().Add(defaultVersionCreateWaitTimeout)
 
 	for {
@@ -339,7 +340,7 @@ func (r *DeploymentResource) Read(ctx context.Context, req resource.ReadRequest,
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/deployments/%s", projectName, data.Name.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/deployments/%s", url.PathEscape(projectName), url.PathEscape(data.Name.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -414,7 +415,7 @@ func (r *DeploymentResource) Update(ctx context.Context, req resource.UpdateRequ
 	projectName := state.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.patchDeployment(ctx, fmt.Sprintf("/projects/%s/deployments/%s", projectName, state.Name.ValueString()), body, &result)
+	err := r.patchDeployment(ctx, fmt.Sprintf("/projects/%s/deployments/%s", url.PathEscape(projectName), url.PathEscape(state.Name.ValueString())), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating deployment", err.Error())
 		return
@@ -485,7 +486,7 @@ func (r *DeploymentResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/deployments/%s", data.ProjectName.ValueString(), data.Name.ValueString()))
+	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/deployments/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.Name.ValueString())))
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting deployment", err.Error())
 		return
@@ -562,7 +563,6 @@ func readDeploymentResult(_ context.Context, result map[string]any, data *Deploy
 	// Output fields.
 	data.OutputFields = fieldsFromAPI(result["output_fields"])
 
-	// Labels.
 	// Labels: treat empty map same as absent so Optional-only field stays consistent.
 	if v, ok := result["labels"]; ok && v != nil {
 		if labelsMap, ok := v.(map[string]any); ok && len(labelsMap) > 0 {

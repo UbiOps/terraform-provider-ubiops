@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"terraform-provider-ubiops/internal/client"
 
@@ -196,7 +197,7 @@ func (r *RequestScheduleResource) Create(ctx context.Context, req resource.Creat
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/schedules", projectName), body, &result)
+	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/schedules", url.PathEscape(projectName)), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating request schedule", err.Error())
 		return
@@ -220,7 +221,7 @@ func (r *RequestScheduleResource) Read(ctx context.Context, req resource.ReadReq
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/schedules/%s", projectName, data.Name.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/schedules/%s", url.PathEscape(projectName), url.PathEscape(data.Name.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -289,7 +290,7 @@ func (r *RequestScheduleResource) Update(ctx context.Context, req resource.Updat
 	projectName := state.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/schedules/%s", projectName, state.Name.ValueString()), body, &result)
+	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/schedules/%s", url.PathEscape(projectName), url.PathEscape(state.Name.ValueString())), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating request schedule", err.Error())
 		return
@@ -310,7 +311,7 @@ func (r *RequestScheduleResource) Delete(ctx context.Context, req resource.Delet
 		return
 	}
 
-	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/schedules/%s", data.ProjectName.ValueString(), data.Name.ValueString()))
+	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/schedules/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.Name.ValueString())))
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting request schedule", err.Error())
 		return
@@ -378,8 +379,7 @@ func readRequestScheduleResult(ctx context.Context, result map[string]any, data 
 		data.RequestDataJSON = types.StringNull()
 	}
 
-	// Labels.
-	// Labels — store null when empty so plan null stays null.
+	// Labels: store null when empty so plan null stays null.
 	if v, ok := result["labels"]; ok && v != nil {
 		if labelsMap, ok := v.(map[string]any); ok && len(labelsMap) > 0 {
 			vals := make(map[string]string, len(labelsMap))

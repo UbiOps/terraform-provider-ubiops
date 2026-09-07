@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"terraform-provider-ubiops/internal/client"
@@ -112,7 +113,7 @@ func (r *DeploymentVersionEnvironmentVariableResource) Configure(ctx context.Con
 }
 
 func (r *DeploymentVersionEnvironmentVariableResource) basePath(projectName, deploymentName, version string) string {
-	return fmt.Sprintf("/projects/%s/deployments/%s/versions/%s/environment-variables", projectName, deploymentName, version)
+	return fmt.Sprintf("/projects/%s/deployments/%s/versions/%s/environment-variables", url.PathEscape(projectName), url.PathEscape(deploymentName), url.PathEscape(version))
 }
 
 func (r *DeploymentVersionEnvironmentVariableResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {

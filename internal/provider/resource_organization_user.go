@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"terraform-provider-ubiops/internal/client"
@@ -111,7 +112,7 @@ func (r *OrganizationUserResource) Create(ctx context.Context, req resource.Crea
 	orgName := data.OrganizationName.ValueString()
 
 	var result map[string]any
-	err := r.client.Post(ctx, fmt.Sprintf("/organizations/%s/users", orgName), body, &result)
+	err := r.client.Post(ctx, fmt.Sprintf("/organizations/%s/users", url.PathEscape(orgName)), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating organization user", err.Error())
 		return
@@ -135,7 +136,7 @@ func (r *OrganizationUserResource) Read(ctx context.Context, req resource.ReadRe
 	orgName := data.OrganizationName.ValueString()
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/organizations/%s/users/%s", orgName, data.ID.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/organizations/%s/users/%s", url.PathEscape(orgName), url.PathEscape(data.ID.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -167,7 +168,7 @@ func (r *OrganizationUserResource) Update(ctx context.Context, req resource.Upda
 	orgName := state.OrganizationName.ValueString()
 
 	var result map[string]any
-	err := r.client.Patch(ctx, fmt.Sprintf("/organizations/%s/users/%s", orgName, state.ID.ValueString()), body, &result)
+	err := r.client.Patch(ctx, fmt.Sprintf("/organizations/%s/users/%s", url.PathEscape(orgName), url.PathEscape(state.ID.ValueString())), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating organization user", err.Error())
 		return
@@ -188,7 +189,7 @@ func (r *OrganizationUserResource) Delete(ctx context.Context, req resource.Dele
 		return
 	}
 
-	err := r.client.Delete(ctx, fmt.Sprintf("/organizations/%s/users/%s", data.OrganizationName.ValueString(), data.ID.ValueString()))
+	err := r.client.Delete(ctx, fmt.Sprintf("/organizations/%s/users/%s", url.PathEscape(data.OrganizationName.ValueString()), url.PathEscape(data.ID.ValueString())))
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting organization user", err.Error())
 		return

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"terraform-provider-ubiops/internal/client"
 
@@ -118,7 +119,7 @@ func (r *InstanceTypeGroupResource) Create(ctx context.Context, req resource.Cre
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/instance-type-groups", projectName), body, &result)
+	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/instance-type-groups", url.PathEscape(projectName)), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating instance type group", err.Error())
 		return
@@ -142,7 +143,7 @@ func (r *InstanceTypeGroupResource) Read(ctx context.Context, req resource.ReadR
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/instance-type-groups/%s", projectName, data.ID.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/instance-type-groups/%s", url.PathEscape(projectName), url.PathEscape(data.ID.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -187,7 +188,7 @@ func (r *InstanceTypeGroupResource) Update(ctx context.Context, req resource.Upd
 	projectName := state.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/instance-type-groups/%s", projectName, state.ID.ValueString()), body, &result)
+	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/instance-type-groups/%s", url.PathEscape(projectName), url.PathEscape(state.ID.ValueString())), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating instance type group", err.Error())
 		return
@@ -208,7 +209,7 @@ func (r *InstanceTypeGroupResource) Delete(ctx context.Context, req resource.Del
 		return
 	}
 
-	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/instance-type-groups/%s", data.ProjectName.ValueString(), data.ID.ValueString()))
+	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/instance-type-groups/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.ID.ValueString())))
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting instance type group", err.Error())
 		return
@@ -236,9 +237,8 @@ func readInstanceTypeGroupResult(result map[string]any, data *InstanceTypeGroupR
 		data.TimeUpdated = types.StringValue(v)
 	}
 
-	// Strip API-added fields, keeping only what's user-controlled: id and priority.
-	// The API also returns cpu, memory, credit_rate, display_name, schedule_timeout, etc.,
-	// and storing those causes state drift against the 3-key config.
+	// Strip API-added fields, keeping only user-controlled id and priority
+	// to avoid state drift against the 3-key config.
 	if v, ok := result["instance_types"]; ok && v != nil {
 		if arr, ok := v.([]any); ok {
 			stripped := make([]map[string]any, 0, len(arr))

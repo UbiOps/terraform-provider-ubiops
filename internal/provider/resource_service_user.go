@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"terraform-provider-ubiops/internal/client"
 
@@ -123,7 +124,7 @@ func (r *ServiceUserResource) Create(ctx context.Context, req resource.CreateReq
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/service-users", projectName), body, &result)
+	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/service-users", url.PathEscape(projectName)), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating service user", err.Error())
 		return
@@ -147,7 +148,7 @@ func (r *ServiceUserResource) Read(ctx context.Context, req resource.ReadRequest
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/service-users/%s", projectName, data.ID.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/service-users/%s", url.PathEscape(projectName), url.PathEscape(data.ID.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -188,7 +189,7 @@ func (r *ServiceUserResource) Update(ctx context.Context, req resource.UpdateReq
 	projectName := state.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/service-users/%s", projectName, state.ID.ValueString()), body, &result)
+	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/service-users/%s", url.PathEscape(projectName), url.PathEscape(state.ID.ValueString())), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating service user", err.Error())
 		return
@@ -209,7 +210,7 @@ func (r *ServiceUserResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/service-users/%s", data.ProjectName.ValueString(), data.ID.ValueString()))
+	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/service-users/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.ID.ValueString())))
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting service user", err.Error())
 		return

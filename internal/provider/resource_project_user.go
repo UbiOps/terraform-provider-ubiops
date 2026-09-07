@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"terraform-provider-ubiops/internal/client"
 
@@ -111,7 +112,7 @@ func (r *ProjectUserResource) Create(ctx context.Context, req resource.CreateReq
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/users", projectName), body, &result)
+	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/users", url.PathEscape(projectName)), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating project user", err.Error())
 		return
@@ -135,7 +136,7 @@ func (r *ProjectUserResource) Read(ctx context.Context, req resource.ReadRequest
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/users/%s", projectName, data.ID.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/users/%s", url.PathEscape(projectName), url.PathEscape(data.ID.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -163,7 +164,7 @@ func (r *ProjectUserResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/users/%s", data.ProjectName.ValueString(), data.ID.ValueString()))
+	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/users/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.ID.ValueString())))
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting project user", err.Error())
 		return

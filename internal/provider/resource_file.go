@@ -119,9 +119,8 @@ func (r *FileResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	// Step 2: PUT an empty body to the pre-signed URL to create the file object.
-	// The UbiOps file API is a two-step process: POST returns a signed upload URL;
-	// the caller must PUT (even with zero bytes) to actually store the object.
+	// Step 2: the UbiOps file API is a two-step process - POST returns a signed
+	// upload URL; PUT (even zero bytes) actually stores the object.
 	if uploadURL, ok := uploadResp["url"].(string); ok && uploadURL != "" {
 		putReq, err := http.NewRequestWithContext(ctx, http.MethodPut, uploadURL, bytes.NewReader([]byte{}))
 		if err != nil {

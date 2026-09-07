@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"terraform-provider-ubiops/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -90,7 +91,7 @@ func (r *ServiceUserTokenResource) Create(ctx context.Context, req resource.Crea
 
 	// The API uses PUT to create/reset the token.
 	var result map[string]any
-	err := r.client.Do(ctx, "PUT", fmt.Sprintf("/projects/%s/service-users/%s/token", projectName, serviceUserID), map[string]any{}, &result)
+	err := r.client.Do(ctx, "PUT", fmt.Sprintf("/projects/%s/service-users/%s/token", url.PathEscape(projectName), url.PathEscape(serviceUserID)), map[string]any{}, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating service user token", err.Error())
 		return
@@ -120,7 +121,7 @@ func (r *ServiceUserTokenResource) Update(ctx context.Context, req resource.Upda
 }
 
 func (r *ServiceUserTokenResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	// The API provides no dedicated delete for a token; creating a new one invalidates the old one.
-	// Simply remove from state.
+	// The API has no dedicated delete for a token; creating a new one
+	// invalidates the old, so just remove it from state.
 	tflog.Trace(ctx, "removed service user token from state")
 }
