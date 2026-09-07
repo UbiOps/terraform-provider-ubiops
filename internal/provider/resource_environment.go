@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"terraform-provider-ubiops/internal/client"
@@ -13,6 +14,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -38,18 +41,19 @@ type EnvironmentResource struct {
 
 // EnvironmentResourceModel maps the environment schema to Go types.
 type EnvironmentResourceModel struct {
-	ID               types.String `tfsdk:"id"`
-	ProjectName      types.String `tfsdk:"project_name"`
-	Name             types.String `tfsdk:"name"`
-	DisplayName      types.String `tfsdk:"display_name"`
-	BaseEnvironment  types.String `tfsdk:"base_environment"`
-	Description      types.String `tfsdk:"description"`
-	Labels           types.Map    `tfsdk:"labels"`
-	SourceFile       types.String `tfsdk:"source_file"`
-	SourceFileSHA256 types.String `tfsdk:"source_file_sha256"`
-	BuildTimeout     types.Int64  `tfsdk:"build_timeout"`
-	CreationDate     types.String `tfsdk:"creation_date"`
-	LastUpdated      types.String `tfsdk:"last_updated"`
+	ID                    types.String `tfsdk:"id"`
+	ProjectName           types.String `tfsdk:"project_name"`
+	Name                  types.String `tfsdk:"name"`
+	DisplayName           types.String `tfsdk:"display_name"`
+	BaseEnvironment       types.String `tfsdk:"base_environment"`
+	Description           types.String `tfsdk:"description"`
+	SupportsRequestFormat types.Bool   `tfsdk:"supports_request_format"`
+	Labels                types.Map    `tfsdk:"labels"`
+	SourceFile            types.String `tfsdk:"source_file"`
+	SourceFileSHA256      types.String `tfsdk:"source_file_sha256"`
+	BuildTimeout          types.Int64  `tfsdk:"build_timeout"`
+	CreationDate          types.String `tfsdk:"creation_date"`
+	LastUpdated           types.String `tfsdk:"last_updated"`
 }
 
 func (r *EnvironmentResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -100,6 +104,15 @@ func (r *EnvironmentResource) Schema(ctx context.Context, req resource.SchemaReq
 				Optional:            true,
 				Computed:            true,
 			},
+			"supports_request_format": schema.BoolAttribute{
+				MarkdownDescription: "Whether the environment supports UbiOps's structured request format (queuing, autoscaling, scheduled requests). Must match the `supports_request_format` of any deployment using this environment, or version creation fails.",
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(true),
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
+			},
 			"labels": schema.MapAttribute{
 				MarkdownDescription: "Dictionary containing key/value pairs where key indicates the label and value is the corresponding value of that label",
 				Optional:            true,
@@ -148,7 +161,8 @@ func (r *EnvironmentResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	body := map[string]any{
-		"name": data.Name.ValueString(),
+		"name":                    data.Name.ValueString(),
+		"supports_request_format": data.SupportsRequestFormat.ValueBool(),
 	}
 
 	if !data.DisplayName.IsNull() && !data.DisplayName.IsUnknown() {
@@ -175,7 +189,7 @@ func (r *EnvironmentResource) Create(ctx context.Context, req resource.CreateReq
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/environments", projectName), body, &result)
+	err := r.client.Post(ctx, fmt.Sprintf("/projects/%s/environments", url.PathEscape(projectName)), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating environment", err.Error())
 		return
@@ -222,7 +236,7 @@ func (r *EnvironmentResource) Read(ctx context.Context, req resource.ReadRequest
 	projectName := data.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/environments/%s", projectName, data.Name.ValueString()), &result)
+	err := r.client.Get(ctx, fmt.Sprintf("/projects/%s/environments/%s", url.PathEscape(projectName), url.PathEscape(data.Name.ValueString())), &result)
 	if err != nil {
 		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -277,15 +291,14 @@ func (r *EnvironmentResource) Update(ctx context.Context, req resource.UpdateReq
 	projectName := state.ProjectName.ValueString()
 
 	var result map[string]any
-	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/environments/%s", projectName, state.Name.ValueString()), body, &result)
+	err := r.client.Patch(ctx, fmt.Sprintf("/projects/%s/environments/%s", url.PathEscape(projectName), url.PathEscape(state.Name.ValueString())), body, &result)
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating environment", err.Error())
 		return
 	}
 
-	// Save source_file/sha256 before readEnvironmentResult overwrites them: the PATCH
-	// response never returns source_file_sha256, so the re-upload check below would see
-	// null==null and skip a real change.
+	// Save source_file/sha256 - PATCH response omits source_file_sha256,
+	// so re-upload check would see null==null otherwise.
 	wantSourceFile := plan.SourceFile
 	wantSourceFileSHA256 := plan.SourceFileSHA256
 
@@ -323,7 +336,7 @@ func (r *EnvironmentResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/environments/%s", data.ProjectName.ValueString(), data.Name.ValueString()))
+	err := r.client.Delete(ctx, fmt.Sprintf("/projects/%s/environments/%s", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.Name.ValueString())))
 	if err != nil {
 		resp.Diagnostics.AddError("Error deleting environment", err.Error())
 		return
@@ -346,12 +359,21 @@ func readEnvironmentResult(result map[string]any, data *EnvironmentResourceModel
 	}
 	if v, ok := result["display_name"].(string); ok {
 		data.DisplayName = types.StringValue(v)
+	} else {
+		data.DisplayName = types.StringNull()
 	}
 	if v, ok := result["base_environment"].(string); ok {
 		data.BaseEnvironment = types.StringValue(v)
+	} else {
+		data.BaseEnvironment = types.StringNull()
 	}
 	if v, ok := result["description"].(string); ok {
 		data.Description = types.StringValue(v)
+	} else {
+		data.Description = types.StringNull()
+	}
+	if v, ok := result["supports_request_format"].(bool); ok {
+		data.SupportsRequestFormat = types.BoolValue(v)
 	}
 	if v, ok := result["creation_date"].(string); ok {
 		data.CreationDate = types.StringValue(v)
@@ -360,7 +382,6 @@ func readEnvironmentResult(result map[string]any, data *EnvironmentResourceModel
 		data.LastUpdated = types.StringValue(v)
 	}
 
-	// Labels.
 	// Labels: store null when empty so plan null stays null.
 	if v, ok := result["labels"]; ok && v != nil {
 		if labelsMap, ok := v.(map[string]any); ok && len(labelsMap) > 0 {
@@ -393,8 +414,7 @@ func (r *EnvironmentResource) uploadRevision(ctx context.Context, data *Environm
 		data.SourceFileSHA256 = types.StringValue(hash)
 	}
 
-	revisionPath := fmt.Sprintf("/projects/%s/environments/%s/revisions",
-		data.ProjectName.ValueString(), data.Name.ValueString())
+	revisionPath := fmt.Sprintf("/projects/%s/environments/%s/revisions", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.Name.ValueString()))
 
 	var result map[string]any
 	if err := r.client.Upload(ctx, revisionPath, filePath, &result); err != nil {
@@ -415,8 +435,7 @@ func (r *EnvironmentResource) waitForBuild(ctx context.Context, data *Environmen
 		return
 	}
 
-	buildsPath := fmt.Sprintf("/projects/%s/environments/%s/revisions/%s/builds",
-		data.ProjectName.ValueString(), data.Name.ValueString(), revisionID)
+	buildsPath := fmt.Sprintf("/projects/%s/environments/%s/revisions/%s/builds", url.PathEscape(data.ProjectName.ValueString()), url.PathEscape(data.Name.ValueString()), url.PathEscape(revisionID))
 	deadline := time.Now().Add(time.Duration(timeoutSecs) * time.Second)
 
 	tflog.Info(ctx, "waiting for environment build", map[string]any{
