@@ -36,6 +36,17 @@ func TestAccOrganizationResource(t *testing.T) {
 					),
 				},
 			},
+			// Update: flip two_factor_authentication_forced - the only in-place-updatable field.
+			{
+				Config: testAccOrganizationResourceConfigTFAForced(orgName),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"ubiops_organization.test",
+						tfjsonpath.New("two_factor_authentication_forced"),
+						knownvalue.Bool(true),
+					),
+				},
+			},
 			// ImportState.
 			{
 				ResourceName:      "ubiops_organization.test",
@@ -56,6 +67,15 @@ func testAccOrganizationResourceConfig(name string) string {
 	return fmt.Sprintf(`
 resource "ubiops_organization" "test" {
   name = %[1]q
+}
+`, name)
+}
+
+func testAccOrganizationResourceConfigTFAForced(name string) string {
+	return fmt.Sprintf(`
+resource "ubiops_organization" "test" {
+  name                              = %[1]q
+  two_factor_authentication_forced = true
 }
 `, name)
 }

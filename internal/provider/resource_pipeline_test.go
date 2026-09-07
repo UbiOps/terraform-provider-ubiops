@@ -45,6 +45,17 @@ func TestAccPipelineResource(t *testing.T) {
 					),
 				},
 			},
+			// Update description - the only in-place-updatable field besides labels.
+			{
+				Config: testAccPipelineResourceConfigWithDescription(projectName, pipelineName, "Updated description"),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"ubiops_pipeline.test",
+						tfjsonpath.New("description"),
+						knownvalue.StringExact("Updated description"),
+					),
+				},
+			},
 			// ImportState.
 			{
 				ResourceName:      "ubiops_pipeline.test",
@@ -80,4 +91,30 @@ resource "ubiops_pipeline" "test" {
   ]
 }
 `, projectName, pipelineName)
+}
+
+func testAccPipelineResourceConfigWithDescription(projectName, pipelineName, description string) string {
+	return fmt.Sprintf(`
+resource "ubiops_pipeline" "test" {
+  project_name = %[1]q
+  name         = %[2]q
+  description  = %[3]q
+  input_type   = "structured"
+  output_type  = "structured"
+
+  input_fields = [
+    {
+      name      = "input"
+      data_type = "string"
+    }
+  ]
+
+  output_fields = [
+    {
+      name      = "output"
+      data_type = "string"
+    }
+  ]
+}
+`, projectName, pipelineName, description)
 }
