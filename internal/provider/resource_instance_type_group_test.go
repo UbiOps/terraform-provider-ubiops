@@ -26,6 +26,9 @@ func TestAccInstanceTypeGroupResource(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy: testAccCheckDestroyed("ubiops_instance_type_group", func(a map[string]string) string {
+			return fmt.Sprintf("/projects/%s/instance-type-groups/%s", a["project_name"], a["id"])
+		}),
 		Steps: []resource.TestStep{
 			// Create.
 			{

@@ -16,6 +16,8 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
 // testAccResourceName builds a lowercase, unique, UbiOps-safe resource name,
@@ -57,6 +59,32 @@ func testAccFirstInstanceTypeID(t *testing.T, projectName string) string {
 		t.Fatal("project has no available instance types")
 	}
 	return page.Results[0].ID
+}
+
+// testAccCheckDestroyed builds a CheckDestroy func: 404s pathFn(attrs) for every resourceType instance.
+func testAccCheckDestroyed(resourceType string, pathFn func(attrs map[string]string) string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		baseURL := os.Getenv("UBIOPS_BASE_URL")
+		if baseURL == "" {
+			baseURL = "https://api.ubiops.com/v2.1"
+		}
+		c := client.NewUbiOpsClient(baseURL, os.Getenv("UBIOPS_API_TOKEN"), "test", "")
+
+		for _, rs := range s.RootModule().Resources {
+			if rs.Type != resourceType {
+				continue
+			}
+			var result map[string]any
+			err := c.Get(context.Background(), pathFn(rs.Primary.Attributes), &result)
+			if err == nil {
+				return fmt.Errorf("%s %s still exists", resourceType, rs.Primary.ID)
+			}
+			if !client.IsNotFound(err) {
+				return fmt.Errorf("checking %s %s destroyed: %w", resourceType, rs.Primary.ID, err)
+			}
+		}
+		return nil
+	}
 }
 
 func TestConfigureClient_Nil(t *testing.T) {

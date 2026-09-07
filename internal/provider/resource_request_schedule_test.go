@@ -26,6 +26,9 @@ func TestAccRequestScheduleResource(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy: testAccCheckDestroyed("ubiops_request_schedule", func(a map[string]string) string {
+			return fmt.Sprintf("/projects/%s/schedules/%s", a["project_name"], a["name"])
+		}),
 		Steps: []resource.TestStep{
 			// Create deployment + version first - default_version can't reference "v1"
 			// before it exists.

@@ -28,6 +28,9 @@ func TestAccProjectUserResource(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy: testAccCheckDestroyed("ubiops_project_user", func(a map[string]string) string {
+			return fmt.Sprintf("/projects/%s/users/%s", a["project_name"], a["id"])
+		}),
 		Steps: []resource.TestStep{
 			// Create.
 			{

@@ -25,6 +25,9 @@ func TestAccMetricResource(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy: testAccCheckDestroyed("ubiops_metric", func(a map[string]string) string {
+			return fmt.Sprintf("/projects/%s/metrics/%s", a["project_name"], a["name"])
+		}),
 		Steps: []resource.TestStep{
 			// Create.
 			{

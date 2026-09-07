@@ -26,6 +26,9 @@ func TestAccDeploymentEnvironmentVariableResource(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy: testAccCheckDestroyed("ubiops_deployment_environment_variable", func(a map[string]string) string {
+			return fmt.Sprintf("/projects/%s/deployments/%s/environment-variables/%s", a["project_name"], a["deployment_name"], a["id"])
+		}),
 		Steps: []resource.TestStep{
 			// Create.
 			{

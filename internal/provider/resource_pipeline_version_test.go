@@ -104,6 +104,9 @@ func TestAccPipelineVersionResource(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy: testAccCheckDestroyed("ubiops_pipeline_version", func(a map[string]string) string {
+			return fmt.Sprintf("/projects/%s/pipelines/%s/versions/%s", a["project_name"], a["pipeline_name"], a["version"])
+		}),
 		Steps: []resource.TestStep{
 			// Create.
 			{
@@ -155,6 +158,9 @@ func TestAccPipelineVersionResourceObjectOrdering(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy: testAccCheckDestroyed("ubiops_pipeline_version", func(a map[string]string) string {
+			return fmt.Sprintf("/projects/%s/pipelines/%s/versions/%s", a["project_name"], a["pipeline_name"], a["version"])
+		}),
 		Steps: []resource.TestStep{
 			// Objects declared out of alphabetical order - regression test for
 			// state not matching config's exact order.

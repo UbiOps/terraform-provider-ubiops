@@ -26,6 +26,9 @@ func TestAccFileResource(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy: testAccCheckDestroyed("ubiops_file", func(a map[string]string) string {
+			return fmt.Sprintf("/projects/%s/buckets/%s/files/%s", a["project_name"], a["bucket_name"], a["file"])
+		}),
 		Steps: []resource.TestStep{
 			// Create.
 			{
