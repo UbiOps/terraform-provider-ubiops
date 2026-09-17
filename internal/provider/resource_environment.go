@@ -423,7 +423,7 @@ func (r *EnvironmentResource) uploadRevision(ctx context.Context, data *Environm
 	}
 
 	tflog.Info(ctx, "uploaded environment revision", map[string]any{"name": data.Name.ValueString()})
-	revisionID, _ := result["id"].(string)
+	revisionID, _ := result["revision"].(string)
 	return revisionID
 }
 

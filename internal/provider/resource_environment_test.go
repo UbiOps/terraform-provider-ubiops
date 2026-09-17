@@ -4,6 +4,7 @@
 package provider
 
 import (
+	"archive/zip"
 	"fmt"
 	"os"
 	"testing"
@@ -175,4 +176,95 @@ resource "ubiops_environment" "test" {
   description      = "Updated description"
 }
 `, projectName, name)
+}
+
+func TestAccEnvironmentResource_BuildFromSource(t *testing.T) {
+	projectName := os.Getenv("UBIOPS_PROJECT")
+	if projectName == "" {
+		t.Skip("UBIOPS_PROJECT must be set for acceptance tests")
+	}
+
+	envName := testAccResourceName(t)
+	zipV1 := testAccZipRequirementsFile(t, testAccWriteRequirementsFile(t, "v1"))
+	zipV2 := testAccZipRequirementsFile(t, testAccWriteRequirementsFile(t, "v2"))
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy: testAccCheckDestroyed("ubiops_environment", func(a map[string]string) string {
+			return fmt.Sprintf("/projects/%s/environments/%s", a["project_name"], a["name"])
+		}),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccEnvironmentResourceConfigSource(projectName, envName, zipV1, 600),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"ubiops_environment.test",
+						tfjsonpath.New("name"),
+						knownvalue.StringExact(envName),
+					),
+					statecheck.ExpectKnownValue(
+						"ubiops_environment.test",
+						tfjsonpath.New("source_file_sha256"),
+						knownvalue.NotNull(),
+					),
+				},
+			},
+			{
+				Config:   testAccEnvironmentResourceConfigSource(projectName, envName, zipV1, 600),
+				PlanOnly: true,
+			},
+			{
+				Config: testAccEnvironmentResourceConfigSource(projectName, envName, zipV2, 600),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"ubiops_environment.test",
+						tfjsonpath.New("source_file_sha256"),
+						knownvalue.NotNull(),
+					),
+				},
+			},
+		},
+	})
+}
+
+func testAccEnvironmentResourceConfigSource(projectName, name, sourceFile string, buildTimeout int) string {
+	return fmt.Sprintf(`
+resource "ubiops_environment" "test" {
+  project_name     = %[1]q
+  name             = %[2]q
+  base_environment = "python3-12"
+  source_file      = %[3]q
+  build_timeout    = %[4]d
+}
+`, projectName, name, sourceFile, buildTimeout)
+}
+
+func testAccZipRequirementsFile(t *testing.T, reqFile string) string {
+	t.Helper()
+
+	zipPath := reqFile + ".zip"
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatalf("failed to create zip file: %v", err)
+	}
+	defer f.Close()
+
+	zw := zip.NewWriter(f)
+	w, err := zw.Create("requirements.txt")
+	if err != nil {
+		t.Fatalf("failed to add requirements.txt to zip: %v", err)
+	}
+	content, err := os.ReadFile(reqFile)
+	if err != nil {
+		t.Fatalf("failed to read requirements.txt: %v", err)
+	}
+	if _, err := w.Write(content); err != nil {
+		t.Fatalf("failed to write requirements.txt to zip: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("failed to close zip writer: %v", err)
+	}
+
+	return zipPath
 }
