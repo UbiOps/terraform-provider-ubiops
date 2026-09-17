@@ -40,6 +40,12 @@ func TestAccServiceUserResource(t *testing.T) {
 					),
 				},
 			},
+			{
+				ResourceName:      "ubiops_service_user.test",
+				ImportState:       true,
+				ImportStateIdFunc: testAccImportStateIDFunc("ubiops_service_user.test", "project_name", "id"),
+				ImportStateVerify: true,
+			},
 			// Update.
 			{
 				Config: testAccServiceUserResourceConfig(projectName, suName, "Updated description"),

@@ -47,6 +47,13 @@ func TestAccDeploymentVersionEnvironmentVariableResource(t *testing.T) {
 					),
 				},
 			},
+			{
+				ResourceName:            "ubiops_deployment_version_environment_variable.test",
+				ImportState:             true,
+				ImportStateIdFunc:       testAccImportStateIDFunc("ubiops_deployment_version_environment_variable.test", "project_name", "deployment_name", "version", "id"),
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"value"},
+			},
 			// Update value.
 			{
 				Config: testAccDeploymentVersionEnvVarResourceConfig(projectName, deploymentName, versionName, envVarName, "updated-value"),

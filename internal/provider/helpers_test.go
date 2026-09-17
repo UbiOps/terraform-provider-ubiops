@@ -4,10 +4,12 @@
 package provider
 
 import (
+	"archive/zip"
 	"context"
 	"crypto/rand"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -85,6 +87,74 @@ func testAccCheckDestroyed(resourceType string, pathFn func(attrs map[string]str
 		}
 		return nil
 	}
+}
+
+// testAccImportStateIDFunc joins the named state attributes with "/" for server-generated import IDs unknown at config-authoring time.
+func testAccImportStateIDFunc(resourceAddress string, attrs ...string) resource.ImportStateIdFunc {
+	return func(s *terraform.State) (string, error) {
+		rs, ok := s.RootModule().Resources[resourceAddress]
+		if !ok {
+			return "", fmt.Errorf("resource not found in state: %s", resourceAddress)
+		}
+		parts := make([]string, len(attrs))
+		for i, attr := range attrs {
+			v, ok := rs.Primary.Attributes[attr]
+			if !ok {
+				return "", fmt.Errorf("attribute %q not found on %s", attr, resourceAddress)
+			}
+			parts[i] = v
+		}
+		return strings.Join(parts, "/"), nil
+	}
+}
+
+// testAccWriteDeploymentPackageZip writes a minimal deployment.py package zip to a temp dir and returns its path.
+func testAccWriteDeploymentPackageZip(t *testing.T, marker string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	zipPath := filepath.Join(dir, "deployment_package.zip")
+
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatalf("failed to create zip file: %v", err)
+	}
+	defer f.Close()
+
+	zw := zip.NewWriter(f)
+	w, err := zw.Create("deployment.py")
+	if err != nil {
+		t.Fatalf("failed to add deployment.py to zip: %v", err)
+	}
+	_, err = fmt.Fprintf(w, `class Deployment:
+    def __init__(self, base_directory, context):
+        pass
+
+    def request(self, data):
+        # marker: %s
+        return data
+`, marker)
+	if err != nil {
+		t.Fatalf("failed to write deployment.py: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("failed to close zip writer: %v", err)
+	}
+
+	return zipPath
+}
+
+// testAccWriteRequirementsFile writes a requirements.txt to a temp dir and returns its path.
+func testAccWriteRequirementsFile(t *testing.T, marker string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "requirements.txt")
+	content := fmt.Sprintf("# marker: %s - no additional dependencies\n", marker)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write requirements.txt: %v", err)
+	}
+	return path
 }
 
 func TestConfigureClient_Nil(t *testing.T) {

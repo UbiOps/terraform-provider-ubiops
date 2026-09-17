@@ -41,6 +41,12 @@ func TestAccInstanceTypeGroupResource(t *testing.T) {
 					),
 				},
 			},
+			{
+				ResourceName:      "ubiops_instance_type_group.test",
+				ImportState:       true,
+				ImportStateIdFunc: testAccImportStateIDFunc("ubiops_instance_type_group.test", "project_name", "id"),
+				ImportStateVerify: true,
+			},
 			// Update name.
 			{
 				Config: testAccInstanceTypeGroupResourceConfig(projectName, groupName+"-updated", instanceTypeID),

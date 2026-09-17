@@ -150,3 +150,88 @@ resource "ubiops_deployment_version" "test" {
 		},
 	})
 }
+
+func TestAccDeploymentVersionResource_BuildFromSource(t *testing.T) {
+	projectName := os.Getenv("UBIOPS_PROJECT")
+	if projectName == "" {
+		t.Skip("UBIOPS_PROJECT must be set for acceptance tests")
+	}
+
+	deploymentName := testAccResourceName(t)
+	versionName := "v1"
+	zipV1 := testAccWriteDeploymentPackageZip(t, "v1")
+	zipV2 := testAccWriteDeploymentPackageZip(t, "v2")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy: testAccCheckDestroyed("ubiops_deployment_version", func(a map[string]string) string {
+			return fmt.Sprintf("/projects/%s/deployments/%s/versions/%s", a["project_name"], a["deployment_name"], a["version"])
+		}),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccDeploymentVersionResourceConfigSource(projectName, deploymentName, versionName, zipV1, 600),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"ubiops_deployment_version.test",
+						tfjsonpath.New("version"),
+						knownvalue.StringExact(versionName),
+					),
+					statecheck.ExpectKnownValue(
+						"ubiops_deployment_version.test",
+						tfjsonpath.New("source_file_sha256"),
+						knownvalue.NotNull(),
+					),
+				},
+			},
+			{
+				Config:   testAccDeploymentVersionResourceConfigSource(projectName, deploymentName, versionName, zipV1, 600),
+				PlanOnly: true,
+			},
+			{
+				Config: testAccDeploymentVersionResourceConfigSource(projectName, deploymentName, versionName, zipV2, 600),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(
+						"ubiops_deployment_version.test",
+						tfjsonpath.New("source_file_sha256"),
+						knownvalue.NotNull(),
+					),
+				},
+			},
+		},
+	})
+}
+
+func testAccDeploymentVersionResourceConfigSource(projectName, deploymentName, version, zipPath string, buildTimeout int) string {
+	return fmt.Sprintf(`
+resource "ubiops_deployment" "test" {
+  project_name = %[1]q
+  name         = %[2]q
+  input_type   = "structured"
+  output_type  = "structured"
+
+  input_fields = [
+    {
+      name      = "input"
+      data_type = "string"
+    }
+  ]
+
+  output_fields = [
+    {
+      name      = "output"
+      data_type = "string"
+    }
+  ]
+}
+
+resource "ubiops_deployment_version" "test" {
+  project_name    = %[1]q
+  deployment_name = ubiops_deployment.test.name
+  version         = %[3]q
+  environment     = "python3-13"
+  source_file     = %[4]q
+  build_timeout   = %[5]d
+}
+`, projectName, deploymentName, version, zipPath, buildTimeout)
+}

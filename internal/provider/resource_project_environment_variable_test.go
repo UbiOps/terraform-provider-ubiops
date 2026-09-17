@@ -45,6 +45,13 @@ func TestAccProjectEnvironmentVariableResource(t *testing.T) {
 					),
 				},
 			},
+			{
+				ResourceName:            "ubiops_project_environment_variable.test",
+				ImportState:             true,
+				ImportStateIdFunc:       testAccImportStateIDFunc("ubiops_project_environment_variable.test", "project_name", "id"),
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"value"},
+			},
 			// Update value.
 			{
 				Config: testAccProjectEnvVarResourceConfig(projectName, envVarName, "updated-value", false),

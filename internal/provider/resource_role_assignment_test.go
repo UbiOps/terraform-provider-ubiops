@@ -45,6 +45,12 @@ func TestAccRoleAssignmentResource(t *testing.T) {
 					),
 				},
 			},
+			{
+				ResourceName:      "ubiops_role_assignment.test",
+				ImportState:       true,
+				ImportStateIdFunc: testAccImportStateIDFunc("ubiops_role_assignment.test", "project_name", "id"),
+				ImportStateVerify: true,
+			},
 			// Delete is automatic.
 		},
 	})
